@@ -1,0 +1,53 @@
+# Terraform: keep dependency lock files under version control
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pkrvars.hcl
+*.auto.pkrvars.json
+credentials.pkrvars.hcl
+*.key
+*-key.pem
+id_rsa
+id_ecdsa
+id_ed25519
+kubeconfig
+kubeconfig.*
+admin.conf
+super-admin.conf
+sealed-secrets-key-backup.yaml
+opnsense*.xml
+config-OPNsense*.xml
+/private/
+/secrets/
+/backups/
+
+# VM images and backups
+*.img
+*.iso
+*.qcow2
+*.vma
+*.vma.zst
+*.vma.gz
+
+# Generated files and workstation artifacts
+.DS_Store
+Thumbs.db
+.vs/
+**/bin/
+**/obj/
+**/__pycache__/
+*.pyc
+node_modules/
