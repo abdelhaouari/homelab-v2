@@ -1,0 +1,52 @@
+---
+- name: Configure local access to the Kubernetes cluster
+  hosts: control_plane
+  become: true
+  gather_facts: false
+
+  vars:
+    local_private_directory: "{{ playbook_dir }}/../private"
+    local_kubeconfig_path: "{{ local_private_directory }}/homelab-v2.kubeconfig"
+
+  tasks:
+    - name: Restrict local private directory permissions
+      ansible.builtin.file:
+        path: "{{ local_private_directory }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+
+    - name: Fetch administrator kubeconfig
+      ansible.builtin.fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ local_kubeconfig_path }}"
+        flat: true
+      no_log: true
+
+    - name: Restrict local kubeconfig permissions
+      ansible.builtin.file:
+        path: "{{ local_kubeconfig_path }}"
+        state: file
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Verify cluster access from WSL
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - "--kubeconfig={{ local_kubeconfig_path }}"
+          - --request-timeout=10s
+          - get
+          - nodes
+          - -o
+          - wide
+      delegate_to: localhost
+      become: false
+      register: local_cluster_access
+      changed_when: false
+
+    - name: Display cluster access result
+      ansible.builtin.debug:
+        var: local_cluster_access.stdout_lines

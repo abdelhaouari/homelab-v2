@@ -1,0 +1,107 @@
+---
+- name: Initialize or verify the Kubernetes control plane
+  hosts: control_plane
+  become: true
+  any_errors_fatal: true
+
+  tasks:
+    - name: Inspect administrator kubeconfig
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_kubeconfig
+
+    - name: Inspect control-plane initialization markers
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/kubernetes/kubelet.conf
+        - /etc/kubernetes/super-admin.conf
+        - /etc/kubernetes/pki
+        - /etc/kubernetes/manifests/etcd.yaml
+        - /etc/kubernetes/manifests/kube-apiserver.yaml
+        - /etc/kubernetes/manifests/kube-controller-manager.yaml
+        - /etc/kubernetes/manifests/kube-scheduler.yaml
+        - /var/lib/etcd/member
+      register: control_plane_markers
+
+    - name: Count existing initialization markers
+      ansible.builtin.set_fact:
+        existing_marker_count: >-
+          {{
+            control_plane_markers.results
+            | selectattr('stat.exists', 'equalto', true)
+            | list
+            | length
+          }}
+
+    - name: Reject partial initialization
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              not admin_kubeconfig.stat.exists
+              and existing_marker_count | int == 0
+            )
+            or
+            (
+              admin_kubeconfig.stat.exists
+              and existing_marker_count | int
+                  == control_plane_markers.results | length
+            )
+        fail_msg: >-
+          Partial or unexpected control-plane state detected.
+          Inspect the existing configuration before continuing.
+          This playbook does not reset or repair the cluster automatically.
+        success_msg: Control-plane initialization markers are consistent.
+
+    - name: Copy configuration for a new control plane
+      ansible.builtin.copy:
+        src: files/kubeadm-init.yml
+        dest: /root/kubeadm-init.yml
+        owner: root
+        group: root
+        mode: "0600"
+      when: not admin_kubeconfig.stat.exists
+
+    - name: Validate configuration for a new control plane
+      ansible.builtin.command:
+        argv:
+          - kubeadm
+          - config
+          - validate
+          - --config
+          - /root/kubeadm-init.yml
+      changed_when: false
+      when: not admin_kubeconfig.stat.exists
+
+    - name: Initialize a new control plane
+      ansible.builtin.command:
+        argv:
+          - kubeadm
+          - init
+          - --config
+          - /root/kubeadm-init.yml
+          - --skip-token-print
+      when: not admin_kubeconfig.stat.exists
+      changed_when: true
+
+    - name: Verify Kubernetes API readiness
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig=/etc/kubernetes/admin.conf
+          - --server=https://10.10.20.11:6443
+          - --request-timeout=10s
+          - get
+          - --raw=/readyz
+      register: api_readiness
+      changed_when: false
+      retries: 12
+      delay: 5
+      until:
+        - api_readiness.rc == 0
+        - api_readiness.stdout | trim == "ok"
+
+    - name: Display Kubernetes API readiness
+      ansible.builtin.debug:
+        msg: "Kubernetes API readiness: {{ api_readiness.stdout | trim }}"

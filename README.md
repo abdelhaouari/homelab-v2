@@ -116,17 +116,23 @@ These checks establish basic cluster connectivity. They do not establish network
 .
 ├── ansible/
 │   ├── bootstrap.yml
+│   ├── cilium.yml
 │   ├── containerd.yml
 │   ├── files/
 │   │   └── kubeadm-init.yml
+│   ├── init-control-plane.yml
 │   ├── inventory.yml
 │   ├── join-workers.yml
 │   ├── kubernetes.yml
+│   ├── local-access.yml
 │   ├── prepare-hosts.yml
-│   └── requirements.txt
+│   ├── requirements.txt
+│   ├── requirements.yml
+│   └── site.yml
 ├── docs/
 │   ├── architecture.md
-│   └── proxmox-bootstrap.md
+│   ├── proxmox-bootstrap.md
+│   └── rebuild.md
 ├── kubernetes/
 │   ├── cilium/
 │   │   └── values.yml
@@ -140,19 +146,45 @@ These checks establish basic cluster connectivity. They do not establish network
     └── versions.tf
 ```
 
-## Rebuild status and operating limits
+## Provisioning and rebuild workflow
 
-The repository contains the provisioning and configuration building blocks. A complete unattended rebuild has not yet been implemented or tested.
+The consolidated Ansible entry point configures the hosts, initializes
+or verifies the control plane, joins or verifies workers, retrieves the
+local kubeconfig, and manages Cilium.
 
-Control-plane initialization, local kubeconfig retrieval, and Cilium installation currently include explicit operator commands. Consolidating these steps into a documented workflow is the next automation milestone.
+After provisioning the VMs with Terraform and preparing the local
+dependencies, run:
 
-All nodes share one physical server, and the cluster has one control plane. The environment is not highly available. Off-host backups and restoration procedures have not yet been implemented and validated.
+```bash
+.venv/bin/ansible-playbook \
+  -i ansible/inventory.yml \
+  ansible/site.yml
+```
 
-Terraform state is currently stored locally and excluded from Git. Recreating infrastructure does not recover application data.
+The complete Ansible workflow was rerun against the existing deployment
+with zero changes and no failures across all four nodes and localhost.
+
+Control-plane initialization checks reject inconsistent local state
+instead of automatically resetting the cluster. Hubble certificates are
+generated and renewed through Cilium's CronJob mechanism, avoiding
+certificate changes on every Helm render.
+
+See the [provisioning and rebuild procedure](docs/rebuild.md) for
+prerequisites, execution order, state handling, and functional tests.
+
+A complete rebuild from fresh VMs has not yet been tested with this
+consolidated workflow. Scheduled certificate renewal and off-host
+restoration also remain unverified.
+
+All nodes share one physical server, and the cluster has one control
+plane. The environment is not highly available.
+
+Terraform state is stored locally and excluded from Git. Recreating
+infrastructure does not recover application data.
 
 ## Next milestones
 
-1. Consolidate the deployment workflow and validate a full rebuild.
+1. Validate the consolidated workflow through a complete rebuild from fresh VMs.
 2. Deploy a small application with tests and documented authorization rules.
 3. Build a CI/CD pipeline with secret scanning, SAST, dependency scanning, and DAST.
 4. Demonstrate a failing security control, a corrective change, and a successful delivery.

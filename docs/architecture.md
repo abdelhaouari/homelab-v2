@@ -180,38 +180,56 @@ validation. DNS availability after losing that worker has not been tested.
 
 ## Automation boundaries
 
-| Tool       | Responsibility                                                           |
-| ---------- | ------------------------------------------------------------------------ |
-| Terraform  | VM lifecycle, virtual hardware, and cloud-init inputs                    |
-| cloud-init | Initial guest user, SSH key, and network configuration                   |
-| Ansible    | Guest Agent, host settings, runtime, Kubernetes packages, worker joining |
-| kubeadm    | Control-plane bootstrap and node joining                                 |
-| Helm       | Cilium installation and configuration                                    |
-| kubectl    | Cluster inspection and functional tests                                  |
+| Tool | Responsibility |
+|---|---|
+| Terraform | VM lifecycle, virtual hardware, and cloud-init inputs |
+| cloud-init | Initial guest user, SSH key, and network configuration |
+| Ansible | Host preparation, cluster bootstrap checks, worker joining, local access, and Cilium orchestration |
+| kubeadm | Control-plane initialization and node joining |
+| Helm | Cilium release management, invoked through Ansible |
+| kubectl | Readiness checks and functional tests |
 
 The official Ubuntu cloud image was verified against its signed checksum
-manifest before import. Image preparation on Proxmox remains an
-administrative prerequisite.
+manifest before import. Image preparation and Proxmox API permissions
+remain administrative prerequisites.
 
-The repository contains the main provisioning and configuration building
-blocks. A single end-to-end rebuild workflow is not yet implemented.
+The consolidated entry point, `ansible/site.yml`, executes:
 
-Current operator-driven steps include:
+1. Guest Agent configuration.
+2. Operating system preparation.
+3. containerd configuration.
+4. Kubernetes package installation.
+5. Control-plane initialization or verification.
+6. Worker joining or registration verification.
+7. Local administrator kubeconfig retrieval.
+8. Cilium release management and readiness checks.
 
-- Preparing the source image and Proxmox API access.
-- Running the Terraform and Ansible stages.
-- Copying and validating the kubeadm configuration, then initializing
-  the control plane.
-- Retrieving a local administrator kubeconfig.
-- Installing Cilium through Helm.
-- Running the network smoke test.
+Local dependencies include the versioned Ansible collection requirements
+and the helm-diff plugin. The rebuild procedure documents their setup.
 
-Repeated runs verified idempotence for the Guest Agent, containerd, host
-preparation, and worker-join playbooks. Kubernetes package index refreshes
-are time-dependent.
+The complete Ansible workflow was rerun against the existing cluster
+with zero changes and no failures on all four nodes and localhost.
+Package index refreshes remain time-dependent.
 
-A partial initialization or join requires diagnosis. The workflow does
-not automatically reset an existing node.
+Control-plane initialization checks require either no detected markers
+or the expected set of existing markers. Inconsistent state stops the
+workflow. Existing control planes must also pass an API readiness check.
+
+Worker joining checks local kubelet configuration and API registration.
+These safeguards do not constitute automatic recovery from every partial
+failure. No automatic cluster reset is performed.
+
+Hubble TLS certificates use Cilium's CronJob generation method. This
+avoids the changing certificate content produced by Helm-based generation
+during repeated renders. The initial certificate Job completed, and a
+subsequent Ansible run reported no changes. Scheduled renewal remains
+untested.
+
+The consolidated workflow has not yet been validated through a complete
+rebuild from fresh VMs. It does not implement Kubernetes upgrades or
+application data restoration.
+
+See `rebuild.md` for prerequisites, commands, and functional validation.
 
 ## Validation evidence
 
@@ -257,7 +275,7 @@ A Proxmox-generated cloud-init deprecation warning remains documented in
 
 ## Next architecture milestones
 
-1. Consolidate the deployment stages and test a complete rebuild.
+1. Test the consolidated deployment workflow through a complete rebuild.
 2. Deploy an application with explicit authentication and authorization.
 3. Add CI/CD security checks with demonstrated failure and remediation.
 4. Validate workload isolation and pipeline identity controls.

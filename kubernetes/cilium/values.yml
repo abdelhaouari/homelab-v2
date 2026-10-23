@@ -17,3 +17,10 @@ ipv6:
 
 operator:
   replicas: 2
+
+# Generate and renew Hubble certificates inside the cluster.
+hubble:
+  tls:
+    auto:
+      enabled: true
+      method: cronJob

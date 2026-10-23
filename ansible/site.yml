@@ -1,0 +1,40 @@
+---
+- name: Bootstrap Kubernetes hosts
+  ansible.builtin.import_playbook: bootstrap.yml
+  tags:
+    - bootstrap
+
+- name: Prepare operating system
+  ansible.builtin.import_playbook: prepare-hosts.yml
+  tags:
+    - system
+
+- name: Configure container runtime
+  ansible.builtin.import_playbook: containerd.yml
+  tags:
+    - runtime
+
+- name: Install Kubernetes components
+  ansible.builtin.import_playbook: kubernetes.yml
+  tags:
+    - packages
+
+- name: Initialize or verify the control plane
+  ansible.builtin.import_playbook: init-control-plane.yml
+  tags:
+    - control-plane
+
+- name: Join or verify workers
+  ansible.builtin.import_playbook: join-workers.yml
+  tags:
+    - workers
+
+- name: Configure local cluster access
+  ansible.builtin.import_playbook: local-access.yml
+  tags:
+    - local-access
+
+- name: Configure Cilium networking
+  ansible.builtin.import_playbook: cilium.yml
+  tags:
+    - networking

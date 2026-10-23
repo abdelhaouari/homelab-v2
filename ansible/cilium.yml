@@ -1,0 +1,61 @@
+---
+- name: Manage Cilium networking
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    local_kubeconfig_path: "{{ playbook_dir }}/../private/homelab-v2.kubeconfig"
+    cilium_values_path: "{{ playbook_dir }}/../kubernetes/cilium/values.yml"
+    cilium_chart_version: "1.20.4"
+
+  tasks:
+    - name: Ensure Cilium release matches the declared configuration
+      kubernetes.core.helm:
+        name: cilium
+        chart_ref: oci://quay.io/cilium/charts/cilium
+        chart_version: "{{ cilium_chart_version }}"
+        release_namespace: kube-system
+        release_state: present
+        kubeconfig: "{{ local_kubeconfig_path }}"
+        values_files:
+          - "{{ cilium_values_path }}"
+        reset_values: true
+        wait: true
+        timeout: 10m
+      register: cilium_release
+
+    - name: Display Cilium release action
+      ansible.builtin.debug:
+        msg: >-
+          {{
+            'Cilium release was installed or updated.'
+            if cilium_release.changed
+            else 'Cilium release already matches the declared configuration.'
+          }}
+
+    - name: Verify all nodes are Ready
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - "--kubeconfig={{ local_kubeconfig_path }}"
+          - wait
+          - --for=condition=Ready
+          - nodes
+          - --all
+          - --timeout=180s
+      changed_when: false
+
+    - name: Verify CoreDNS rollout
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - "--kubeconfig={{ local_kubeconfig_path }}"
+          - rollout
+          - status
+          - deployment/coredns
+          - --namespace=kube-system
+          - --timeout=180s
+      changed_when: false
