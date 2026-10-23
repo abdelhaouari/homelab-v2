@@ -1,0 +1,19 @@
+# Use the per-node PodCIDRs allocated by Kubernetes.
+ipam:
+  mode: kubernetes
+
+# Carry inter-node pod traffic over VXLAN.
+routingMode: tunnel
+tunnelProtocol: vxlan
+
+# Keep the kube-proxy deployed by kubeadm.
+kubeProxyReplacement: false
+
+ipv4:
+  enabled: true
+
+ipv6:
+  enabled: false
+
+operator:
+  replicas: 2

@@ -1,0 +1,18 @@
+---
+- name: Prepare Kubernetes hosts
+  hosts: kubernetes
+  become: true
+
+  tasks:
+    - name: Install QEMU Guest Agent
+      ansible.builtin.apt:
+        name: qemu-guest-agent
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        install_recommends: false
+        policy_rc_d: 101
+    - name: Ensure QEMU Guest Agent is running
+      ansible.builtin.systemd_service:
+        name: qemu-guest-agent.service
+        state: started

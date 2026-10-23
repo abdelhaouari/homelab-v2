@@ -1,0 +1,63 @@
+---
+- name: Configure containerd for Kubernetes
+  hosts: kubernetes
+  become: true
+
+  vars:
+    containerd_package_version: "2.2.1-0ubuntu1~24.04.4"
+
+  tasks:
+    - name: Install containerd
+      ansible.builtin.apt:
+        name: "containerd={{ containerd_package_version }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        install_recommends: false
+        policy_rc_d: 101
+      notify: Restart containerd
+
+    - name: Ensure containerd configuration directory exists
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure containerd with systemd cgroups
+      ansible.builtin.copy:
+        dest: /etc/containerd/config.toml
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          version = 3
+
+          [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc.options]
+            SystemdCgroup = true
+      notify: Restart containerd
+
+    - name: Apply pending containerd restart
+      ansible.builtin.meta: flush_handlers
+
+    - name: Ensure containerd is enabled and running
+      ansible.builtin.systemd_service:
+        name: containerd
+        enabled: true
+        state: started
+
+    - name: Inspect containerd plugins
+      ansible.builtin.command: ctr plugins ls
+      register: containerd_plugins
+      changed_when: false
+
+    - name: Display containerd plugins
+      ansible.builtin.debug:
+        var: containerd_plugins.stdout_lines
+
+  handlers:
+    - name: Restart containerd
+      ansible.builtin.systemd_service:
+        name: containerd
+        state: restarted

@@ -1,31 +1,161 @@
-# Homelab V2
+# Homelab V2 | Kubernetes & Platform Security
 
-A Kubernetes homelab focused on reproducible infrastructure, platform security, and application delivery.
+A four-node Kubernetes homelab built on Proxmox VE, with Terraform provisioning, Ansible host configuration, and Cilium networking.
 
-This repository documents the rebuild of a personal lab running on Proxmox VE. The work covers VM provisioning, operating system configuration, Kubernetes administration, and security controls exercised through a small application.
+This project develops practical skills in infrastructure automation, Kubernetes operations, and platform security. The implemented foundation supports the next phase: deploying an application and demonstrating security controls throughout its delivery pipeline.
 
-Proxmox VE and OPNsense are already in place. The repository currently contains the architecture notes for the rebuild. Provisioning code and operating procedures will be added as the platform is implemented.
+**Current milestone:** one control plane and three workers are Ready. Cilium and CoreDNS are operational. Cross-node pod connectivity, internal DNS resolution, and HTTP access through a Kubernetes Service have been tested successfully.
 
-## Infrastructure
+## What has been built
 
-The initial design uses Ubuntu Server VMs with containerd and kubeadm. Terraform manages VM resources, cloud-init handles initial guest configuration, and Ansible configures the hosts and cluster.
+- **Infrastructure as code:** Terraform provisions four Ubuntu VMs, including CPU, memory, disks, VLAN attachment, static addressing, and cloud-init SSH configuration.
+- **Repeatable host configuration:** Ansible installs the QEMU Guest Agent, configures containerd with systemd cgroups, prepares host networking, and installs version-pinned Kubernetes packages.
+- **Kubernetes lifecycle operations:** kubeadm initializes the control plane; an Ansible playbook joins workers using short-lived bootstrap tokens without displaying their values.
+- **Cluster networking:** Cilium provides a VXLAN overlay using Kubernetes-assigned PodCIDRs, with kube-proxy retained for Service networking.
+- **Functional verification:** a reusable smoke test checks DNS, direct HTTP between pods on different workers, and HTTP through a ClusterIP Service.
 
-The cluster target is one control plane and three workers, running on a single physical server with 64 GB of RAM. See the [architecture notes](docs/architecture.md) for the resource budget, network layout, and design rationale.
+## Architecture
 
-## Repository layout
+The cluster runs on a single physical Proxmox server with 64 GB of RAM and a ZFS RAIDZ1 pool. OPNsense provides the gateway for the Kubernetes VLAN.
+
+| Node           | Role          | vCPU |   RAM | System disk | Address       |
+| -------------- | ------------- | ---: | ----: | ----------: | ------------- |
+| `k8s-cp01`     | Control plane |    2 | 4 GiB |      60 GiB | `10.10.20.11` |
+| `k8s-worker01` | Worker        |    2 | 8 GiB |      80 GiB | `10.10.20.21` |
+| `k8s-worker02` | Worker        |    2 | 8 GiB |      80 GiB | `10.10.20.22` |
+| `k8s-worker03` | Worker        |    2 | 8 GiB |      80 GiB | `10.10.20.23` |
+
+### Network design
+
+| Network                   | Range                       | Allocation                                                    |
+| ------------------------- | --------------------------- | ------------------------------------------------------------- |
+| Kubernetes nodes, VLAN 20 | `10.10.20.0/24`             | Static addresses through cloud-init                           |
+| DHCP pool on VLAN 20      | `10.10.20.200–10.10.20.250` | OPNsense DHCP                                                 |
+| Pods                      | `10.244.0.0/16`             | Kubernetes assigns a `/24` per node; Cilium allocates pod IPs |
+| Services                  | `10.96.0.0/16`              | Kubernetes ClusterIP allocation                               |
+
+Node addresses are outside the DHCP pool. Pod and Service ranges were checked against the documented lab networks and the observed WSL and node routes.
+
+VXLAN carries inter-node pod traffic over the VM network without requiring pod-subnet routes in OPNsense. VXLAN encapsulation does not encrypt traffic.
+
+### Validated software baseline
+
+| Component                  | Version               |
+| -------------------------- | --------------------- |
+| Ubuntu Server              | 24.04.5 LTS           |
+| Kubernetes                 | 1.36.5                |
+| containerd                 | 2.2.1                 |
+| Cilium                     | 1.20.4                |
+| Terraform                  | 1.17.0                |
+| Proxmox Terraform provider | `bpg/proxmox` 0.117.0 |
+| Ansible Core               | 2.21.5                |
+
+Kubernetes packages use the exact APT version `1.36.5-1.1` and are held to prevent unplanned upgrades. The Cilium chart version is specified explicitly during installation.
+
+## Engineering decisions
+
+### Separate provisioning from configuration
+
+Terraform owns VM resources and their lifecycle. Cloud-init establishes initial network and SSH access. Ansible configures the operating system and Kubernetes components. Helm installs Cilium from a versioned values file.
+
+This separation keeps infrastructure changes distinct from guest configuration and cluster add-ons.
+
+### Validate the provisioning path before scaling it
+
+A disposable VM was used to verify cloud-init, SSH access, DNS, outbound HTTPS, time synchronization, and the QEMU Guest Agent.
+
+That VM was also recreated to exercise the provisioning path, then removed through Terraform before completing the four-node cluster.
+
+### Make configuration repeatable
+
+Repeated Ansible runs confirmed no further changes for the Guest Agent, containerd, and host preparation. Worker joining skips nodes with existing kubelet configuration and checks their registration through the Kubernetes API.
+
+Package index refreshes remain time-dependent. An existing kubelet configuration is not treated as sufficient evidence of a healthy node.
+
+## Security considerations
+
+Implemented measures include:
+
+- Verification of the Ubuntu cloud image against its signed checksum manifest.
+- Proxmox API TLS verification using the local certificate authority.
+- API credentials supplied through an environment variable rather than Terraform files.
+- A dedicated SSH key for lab administration.
+- Short-lived worker bootstrap tokens, with sensitive Ansible output suppressed.
+- A dedicated local administrator kubeconfig with restricted file permissions.
+- Git exclusions for credentials, private keys, kubeconfigs, Terraform state, plans, and local environments.
+
+The Proxmox token intentionally has VM administration permissions across `/vms` to simplify this personal lab. This includes access to the OPNsense VM and is not a least-privilege boundary.
+
+Network segmentation and Kubernetes NetworkPolicy enforcement have not yet been validated. Traffic between VMs on the same VLAN can remain on the Proxmox bridge without passing through OPNsense.
+
+## Validation
+
+The following results were observed during deployment:
+
+| Check                     | Result                                                               |
+| ------------------------- | -------------------------------------------------------------------- |
+| Kubernetes node readiness | All four nodes reported `Ready`                                      |
+| Cilium agents             | Ready on all four nodes                                              |
+| Cilium operators          | Two replicas ready                                                   |
+| CoreDNS                   | Both replicas ready                                                  |
+| Internal DNS              | Test Service resolved to its ClusterIP                               |
+| Cross-node pod traffic    | HTTP request returned the expected response                          |
+| Service networking        | HTTP request through the Service name returned the expected response |
+
+The network smoke test places a server on `k8s-worker01` and a client on `k8s-worker02`. Both direct pod access and Service access returned:
+
+```text
+homelab-network-ok
+```
+
+These checks establish basic cluster connectivity. They do not establish network isolation, performance, recovery capability, or application availability during failure.
+
+## Repository structure
 
 ```text
 .
-├── README.md
-├── .gitignore
-└── docs/
-    └── architecture.md
+├── ansible/
+│   ├── bootstrap.yml
+│   ├── containerd.yml
+│   ├── files/
+│   │   └── kubeadm-init.yml
+│   ├── inventory.yml
+│   ├── join-workers.yml
+│   ├── kubernetes.yml
+│   ├── prepare-hosts.yml
+│   └── requirements.txt
+├── docs/
+│   ├── architecture.md
+│   └── proxmox-bootstrap.md
+├── kubernetes/
+│   ├── cilium/
+│   │   └── values.yml
+│   └── tests/
+│       └── network-smoke.yml
+└── terraform/
+    ├── .terraform.lock.hcl
+    ├── cluster-vms.tf
+    ├── connection-check.tf
+    ├── providers.tf
+    └── versions.tf
 ```
 
-Infrastructure code, configuration, and deployment instructions will be added alongside their implementation. Documentation will include the commands used, relevant results, and any operating limitations.
+## Rebuild status and operating limits
 
-## Scope
+The repository contains the provisioning and configuration building blocks. A complete unattended rebuild has not yet been implemented or tested.
 
-This is a personal learning environment. All initial nodes share one physical host, so the cluster cannot remain available after loss of that host. Data recovery requires backups stored outside the server.
+Control-plane initialization, local kubeconfig retrieval, and Cilium installation currently include explicit operator commands. Consolidating these steps into a documented workflow is the next automation milestone.
 
-Configuration examples and application data are intended for public use. Credentials, private keys, privileged kubeconfigs, Terraform state, and backup archives remain outside this repository.
+All nodes share one physical server, and the cluster has one control plane. The environment is not highly available. Off-host backups and restoration procedures have not yet been implemented and validated.
+
+Terraform state is currently stored locally and excluded from Git. Recreating infrastructure does not recover application data.
+
+## Next milestones
+
+1. Consolidate the deployment workflow and validate a full rebuild.
+2. Deploy a small application with tests and documented authorization rules.
+3. Build a CI/CD pipeline with secret scanning, SAST, dependency scanning, and DAST.
+4. Demonstrate a failing security control, a corrective change, and a successful delivery.
+5. Add workload identity, software supply-chain controls, and tested recovery procedures as the application evolves.
+
+These are planned extensions, not completed capabilities.

@@ -1,0 +1,111 @@
+---
+- name: Configure Kubernetes package repository
+  hosts: kubernetes
+  become: true
+
+  vars:
+    kubernetes_minor_version: "1.36"
+    kubernetes_package_version: "1.36.5-1.1"
+
+  tasks:
+    - name: Ensure CA certificates are installed
+      ansible.builtin.apt:
+        name: ca-certificates
+        state: present
+
+    - name: Ensure APT keyring directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download Kubernetes repository signing key
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_minor_version }}/deb/Release.key"
+        dest: /etc/apt/keyrings/kubernetes.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Configure Kubernetes APT repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/kubernetes.sources
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Types: deb
+          URIs: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_minor_version }}/deb/
+          Suites: /
+          Signed-By: /etc/apt/keyrings/kubernetes.asc
+
+    - name: Refresh APT package indexes
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: List available Kubernetes package versions
+      ansible.builtin.command:
+        argv:
+          - apt-cache
+          - madison
+          - kubeadm
+          - kubelet
+          - kubectl
+      register: kubernetes_available_versions
+      changed_when: false
+
+    - name: Display available Kubernetes package versions
+      ansible.builtin.debug:
+        var: kubernetes_available_versions.stdout_lines
+
+    - name: Install Kubernetes components
+      ansible.builtin.apt:
+        name:
+          - "kubeadm={{ kubernetes_package_version }}"
+          - "kubelet={{ kubernetes_package_version }}"
+          - "kubectl={{ kubernetes_package_version }}"
+        state: present
+        install_recommends: false
+        policy_rc_d: 101
+
+    - name: Hold Kubernetes package versions
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubeadm
+        - kubelet
+        - kubectl
+
+    - name: Enable kubelet at boot
+      ansible.builtin.systemd_service:
+        name: kubelet
+        enabled: true
+        daemon_reload: true
+
+    - name: Read installed Kubernetes package versions
+      ansible.builtin.command:
+        argv:
+          - dpkg-query
+          - --show
+          - kubeadm
+          - kubelet
+          - kubectl
+      register: kubernetes_installed_versions
+      changed_when: false
+
+    - name: Display installed Kubernetes package versions
+      ansible.builtin.debug:
+        var: kubernetes_installed_versions.stdout_lines
+
+    - name: Read held packages
+      ansible.builtin.command: apt-mark showhold
+      register: held_packages
+      changed_when: false
+
+    - name: Display held packages
+      ansible.builtin.debug:
+        var: held_packages.stdout_lines

@@ -1,0 +1,61 @@
+---
+- name: Join Kubernetes workers
+  hosts: workers
+  become: true
+
+  tasks:
+    - name: Check for existing kubelet configuration
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_configuration
+
+    - name: Create a short-lived join token for this worker
+      ansible.builtin.command:
+        argv:
+          - kubeadm
+          - token
+          - create
+          - --ttl
+          - 15m
+          - --print-join-command
+      delegate_to: k8s-cp01
+      register: worker_join_command
+      when: not kubelet_configuration.stat.exists
+      changed_when: true
+      no_log: true
+
+    - name: Join worker to the cluster
+      ansible.builtin.command:
+        argv: >-
+          {{
+            worker_join_command.stdout.split()
+            + [
+                '--cri-socket',
+                'unix:///run/containerd/containerd.sock',
+                '--node-name',
+                inventory_hostname
+              ]
+          }}
+      when: not kubelet_configuration.stat.exists
+      no_log: true
+
+    - name: Verify worker registration in the cluster
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - --kubeconfig=/etc/kubernetes/admin.conf
+          - get
+          - node
+          - "{{ inventory_hostname }}"
+          - -o
+          - wide
+      delegate_to: k8s-cp01
+      register: worker_registration
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: worker_registration.rc == 0
+
+    - name: Display worker registration
+      ansible.builtin.debug:
+        var: worker_registration.stdout_lines

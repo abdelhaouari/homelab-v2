@@ -1,0 +1,23 @@
+all:
+  children:
+    kubernetes:
+      vars:
+        ansible_user: ubuntu
+        ansible_ssh_private_key_file: ~/.ssh/homelab_v2_ed25519
+        ansible_ssh_common_args: "-o IdentitiesOnly=yes"
+        ansible_python_interpreter: /usr/bin/python3
+
+      children:
+        control_plane:
+          hosts:
+            k8s-cp01:
+              ansible_host: 10.10.20.11
+
+        workers:
+          hosts:
+            k8s-worker01:
+              ansible_host: 10.10.20.21
+            k8s-worker02:
+              ansible_host: 10.10.20.22
+            k8s-worker03:
+              ansible_host: 10.10.20.23

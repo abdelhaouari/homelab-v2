@@ -1,0 +1,31 @@
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+
+localAPIEndpoint:
+  advertiseAddress: "10.10.20.11"
+  bindPort: 6443
+
+nodeRegistration:
+  name: k8s-cp01
+  criSocket: unix:///run/containerd/containerd.sock
+
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+
+clusterName: homelab-v2
+kubernetesVersion: v1.36.5
+controlPlaneEndpoint: "10.10.20.11:6443"
+
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/16"
+  dnsDomain: cluster.local
+
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+
+cgroupDriver: systemd
+failSwapOn: true
