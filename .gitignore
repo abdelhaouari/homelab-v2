@@ -54,3 +54,4 @@ node_modules/
 
 # Local Python virtual environment
 /.venv/
+/app/.venv/
