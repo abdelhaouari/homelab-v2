@@ -2,8 +2,8 @@
 
 ## Status
 
-The Python domain layer and PostgreSQL persistence are implemented and
-tested locally.
+The Python domain layer, PostgreSQL persistence, and HTTP health
+endpoints are implemented and tested locally.
 
 Completed:
 
@@ -14,6 +14,9 @@ Completed:
 - Parameterized queries for creation, retrieval, and decisions.
 - Conditional updates preventing concurrent decisions from overwriting
   each other.
+- FastAPI health endpoints served locally with Uvicorn.
+- Database connection configuration through environment variables,
+  with the application password read from a local file excluded from Git.
 
 Observed validation:
 
@@ -21,14 +24,26 @@ Observed validation:
 - 10 PostgreSQL integration tests passed.
 - 1 concurrent-decision test passed using two database connections.
 - 5 SQL checks passed for valid requests and decision consistency.
+- 1 HTTP liveness test and 3 HTTP readiness tests passed in separate runs.
+- Stopping PostgreSQL caused readiness to return HTTP 503 while liveness
+  continued to return HTTP 200.
+- Restarting PostgreSQL restored HTTP 200 readiness without restarting
+  the application.
 
 The concurrency test forced both transactions to read a pending request.
 One decision committed, the other raised a conflict, and a separate
 connection retrieved the winning decision.
 
-The HTTP API, OIDC authentication, application container, and CI/CD
-pipeline are not implemented yet. Tests use synthetic application
-identities and a local PostgreSQL instance.
+HTTP readiness tests simulate database outcomes. The PostgreSQL outage
+and recovery scenario was also verified manually with Docker Compose.
+
+Business HTTP endpoints, OIDC authentication, the application container,
+and the CI/CD pipeline are not implemented yet. Business-rule tests use
+synthetic identities.
+
+FastAPI currently runs directly in WSL. PostgreSQL runs in a local
+Docker container managed by Docker Compose. Neither component is
+deployed to the homelab Kubernetes cluster yet.
 
 ## Purpose
 
@@ -82,6 +97,10 @@ request applies regardless of role combinations.
 
 ## Security invariants
 
+These are target security requirements. Domain and database tests cover
+the implemented business rules; HTTP authentication and authorization
+remain to be implemented and validated.
+
 1. Unauthenticated requests cannot access application records.
 2. Read-only users cannot create requests or make decisions.
 3. A requester cannot approve or reject their own request.
@@ -93,19 +112,64 @@ request applies regardless of role combinations.
 8. Invalid input is rejected before persistence.
 9. Credentials and access tokens must not appear in application logs.
 
-## Proposed endpoints
+## HTTP endpoints
 
-| Method | Path                              | Purpose                              |
-| ------ | --------------------------------- | ------------------------------------ |
-| GET    | /health/live                      | Process liveness                     |
-| GET    | /health/ready                     | Readiness, including database access |
-| POST   | /promotion-requests               | Submit a request                     |
-| GET    | /promotion-requests               | List requests                        |
-| GET    | /promotion-requests/{id}          | Inspect a request                    |
-| POST   | /promotion-requests/{id}/decision | Approve or reject a request          |
+| Method | Path | Purpose | Status |
+| ------ | ---- | ------- | ------ |
+| GET | /healthz | Application liveness | Implemented |
+| GET | /readyz | PostgreSQL connectivity and query execution | Implemented |
+| POST | /promotion-requests | Submit a request | Planned |
+| GET | /promotion-requests | List requests | Planned |
+| GET | /promotion-requests/{id} | Inspect a request | Planned |
+| POST | /promotion-requests/{id}/decision | Approve or reject a request | Planned |
 
-Health endpoints return minimal status information and no credentials
-or internal configuration.
+Health endpoints return minimal status information without credentials
+or internal error details.
+
+Readiness establishes a database connection and executes SELECT 1.
+It does not validate the application schema or exercise business
+operations. Connection establishment has a three-second timeout;
+SQL statements in the readiness transaction have a two-second timeout.
+
+## Local HTTP development
+
+Run these commands from the repository root after creating the
+application virtual environment:
+
+```bash
+app/.venv/bin/python -m pip install -r app/requirements-dev.txt
+docker compose -f app/compose.yml up -d --wait postgres
+```
+
+The database schema and promotion_app role must already be initialized.
+Store the existing application-role password in
+private/promotion-app-password.txt with permissions 0600.
+The private directory is excluded from Git. This file is plaintext,
+not an encrypted secret store.
+
+Start the API:
+
+```bash
+PROMOTION_DB_PASSWORD_FILE="$PWD/private/promotion-app-password.txt" \
+app/.venv/bin/python -m uvicorn promotion_api.main:app \
+  --app-dir app/src \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+Default database settings are 127.0.0.1:5433, database promotion,
+and user promotion_app. Override them with PROMOTION_DB_HOST,
+PROMOTION_DB_PORT, PROMOTION_DB_NAME, and PROMOTION_DB_USER.
+
+Run the HTTP tests without starting Uvicorn or PostgreSQL:
+
+```bash
+PYTHONPATH=app/src app/.venv/bin/python -m unittest discover \
+  -s app/tests -p 'test_health.py' -v
+
+PYTHONPATH=app/src app/.venv/bin/python -m unittest discover \
+  -s app/tests -p 'test_readiness.py' -v
+```
 
 ## Implementation sequence
 
