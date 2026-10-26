@@ -2,6 +2,14 @@ import psycopg
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from typing import Annotated
+
+from fastapi import Depends
+
+from promotion_api.authentication import get_current_actor
+from promotion_api.domain import Actor
+from promotion_api.routes import router as promotion_router
+
 from promotion_api.database import connect_database
 
 app = FastAPI(
@@ -9,6 +17,8 @@ app = FastAPI(
     version="0.1.0",
     description="Image promotion requests and approval decisions.",
 )
+
+app.include_router(promotion_router)
 
 
 @app.get("/healthz", tags=["health"])
@@ -40,3 +50,13 @@ def readyz() -> JSONResponse:
         status_code=200,
         content={"status": "ready"},
     )
+
+
+@app.get("/me", tags=["identity"])
+def read_current_identity(
+    actor: Annotated[Actor, Depends(get_current_actor)],
+) -> dict:
+    return {
+        "subject": actor.subject,
+        "roles": sorted(role.value for role in actor.roles),
+    }

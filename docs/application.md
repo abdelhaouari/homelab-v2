@@ -2,48 +2,58 @@
 
 ## Status
 
-The Python domain layer, PostgreSQL persistence, and HTTP health
-endpoints are implemented and tested locally.
+The API implements promotion submission, retrieval, listing, and
+approval or rejection, with PostgreSQL persistence and Keycloak
+authentication.
 
-Completed:
+Implemented capabilities:
 
-- Promotion submission and approval/rejection rules.
-- Role checks and prevention of self-approval or self-rejection.
-- PostgreSQL schema with data consistency constraints.
-- A restricted application database account.
-- Parameterized queries for creation, retrieval, and decisions.
-- Conditional updates preventing concurrent decisions from overwriting
-  each other.
-- FastAPI health endpoints served locally with Uvicorn.
-- Database connection configuration through environment variables,
-  with the application password read from a local file excluded from Git.
+- Authorization Code flow with PKCE S256 for the local CLI.
+- ID token signature, issuer, audience, expiry, and nonce validation.
+- API access token validation and client-role extraction.
+- Reader, developer, and approver permissions.
+- Authenticated requester and decision-maker identities.
+- Prevention of self-approval and self-rejection.
+- PostgreSQL constraints and a restricted application database account.
+- Parameterized queries and conditional updates preventing concurrent
+  decisions from overwriting each other.
+- Liveness and database readiness endpoints.
+- A versioned Keycloak realm configuration for fresh installations.
 
-Observed validation:
+Automated validation completed in separate runs:
 
-- 10 domain unit tests passed.
-- 10 PostgreSQL integration tests passed.
-- 1 concurrent-decision test passed using two database connections.
-- 5 SQL checks passed for valid requests and decision consistency.
-- 1 HTTP liveness test and 3 HTTP readiness tests passed in separate runs.
-- Stopping PostgreSQL caused readiness to return HTTP 503 while liveness
-  continued to return HTTP 200.
-- Restarting PostgreSQL restored HTTP 200 readiness without restarting
-  the application.
+| Test suite | Passed | Scope |
+| ---------- | -----: | ----- |
+| Domain | 10 | Business rules |
+| PostgreSQL repository | 10 | Persistence and permissions |
+| Concurrent decisions | 1 | Two competing database transactions |
+| SQL checks | 5 | Schema constraints |
+| Liveness | 1 | HTTP response |
+| Readiness | 3 | Simulated database outcomes |
+| ID token validation | 7 | Signed tokens with controlled keys and claims |
+| API authentication | 8 | Access token validation through HTTP |
+| HTTP routes | 9 | Authorization and input validation with mocked database access |
 
-The concurrency test forced both transactions to read a pending request.
-One decision committed, the other raised a conflict, and a separate
-connection retrieved the winning decision.
+Manual end-to-end validation:
 
-HTTP readiness tests simulate database outcomes. The PostgreSQL outage
-and recovery scenario was also verified manually with Docker Compose.
+- A developer authenticated through Keycloak, submitted a request,
+  and retrieved the persisted record.
+- A different user with the approver role approved that request.
+- Repeating the decision returned HTTP 409.
+- A reader received HTTP 403 when attempting a decision, but could
+  retrieve and list requests.
+- Keycloak rejected an incorrect PKCE verifier with invalid_grant.
+- Stopping PostgreSQL caused readiness to return HTTP 503 while
+  liveness remained HTTP 200. Restarting PostgreSQL restored readiness.
+- A disposable Keycloak instance imported the versioned realm and
+  served its OIDC discovery document.
 
-Business HTTP endpoints, OIDC authentication, the application container,
-and the CI/CD pipeline are not implemented yet. Business-rule tests use
-synthetic identities.
+FastAPI runs directly in WSL. PostgreSQL and Keycloak run in local
+Docker Compose containers. The application is not yet containerized
+or deployed to Kubernetes. CI/CD and image signing remain planned.
 
-FastAPI currently runs directly in WSL. PostgreSQL runs in a local
-Docker container managed by Docker Compose. Neither component is
-deployed to the homelab Kubernetes cluster yet.
+The API records promotion decisions. It does not deploy images or
+verify their existence, signatures, provenance, or scan results.
 
 ## Purpose
 
@@ -97,9 +107,9 @@ request applies regardless of role combinations.
 
 ## Security invariants
 
-These are target security requirements. Domain and database tests cover
-the implemented business rules; HTTP authentication and authorization
-remain to be implemented and validated.
+The implementation enforces the following rules through authentication,
+application logic, database permissions, and constraints. The validation
+above covers specific scenarios; it is not an exhaustive security audit.
 
 1. Unauthenticated requests cannot access application records.
 2. Read-only users cannot create requests or make decisions.
@@ -114,14 +124,15 @@ remain to be implemented and validated.
 
 ## HTTP endpoints
 
-| Method | Path | Purpose | Status |
+| Method | Path | Purpose | Access |
 | ------ | ---- | ------- | ------ |
-| GET | /healthz | Application liveness | Implemented |
-| GET | /readyz | PostgreSQL connectivity and query execution | Implemented |
-| POST | /promotion-requests | Submit a request | Planned |
-| GET | /promotion-requests | List requests | Planned |
-| GET | /promotion-requests/{id} | Inspect a request | Planned |
-| POST | /promotion-requests/{id}/decision | Approve or reject a request | Planned |
+| GET | /healthz | Application liveness | Public |
+| GET | /readyz | Database connectivity and query execution | Public |
+| GET | /me | Verified identity and application roles | Authenticated |
+| POST | /promotion-requests | Submit a request | Developer |
+| GET | /promotion-requests | List requests with bounded pagination | Reader, developer, approver |
+| GET | /promotion-requests/{id} | Inspect a request | Reader, developer, approver |
+| POST | /promotion-requests/{id}/decision | Approve or reject a pending request | Approver, excluding the requester |
 
 Health endpoints return minimal status information without credentials
 or internal error details.
@@ -130,6 +141,37 @@ Readiness establishes a database connection and executes SELECT 1.
 It does not validate the application schema or exercise business
 operations. Connection establishment has a three-second timeout;
 SQL statements in the readiness transaction have a two-second timeout.
+
+## Local identity configuration
+
+Keycloak serves the homelab realm at
+http://localhost:8080/realms/homelab.
+
+The promotion-cli public client uses Authorization Code with PKCE S256
+and the exact redirect URI http://127.0.0.1:8765/callback.
+It has no client secret.
+
+The promotion-api client defines the reader, developer, and approver
+roles. An audience mapper includes promotion-api in access tokens
+issued to the CLI.
+
+The CLI validates ID tokens for promotion-cli. The API validates access
+tokens for promotion-api and derives the actor from the verified subject
+and application roles. Usernames are not used as authorization identities.
+
+Compose mounts app/keycloak read-only into Keycloak's import directory.
+The --import-realm startup option imports missing realms and skips
+existing ones. Editing the JSON does not update an existing realm.
+
+The versioned realm contains client configuration and role definitions,
+but no users, passwords, or signing keys. Users and role assignments must
+be provisioned separately. Recreating users generates new subjects and
+does not restore identities referenced by existing promotion records.
+
+Keycloak uses development mode and local HTTP. This configuration is
+for local learning, not production deployment. Local credential files
+are excluded from Git but remain plaintext. Database volumes and identity
+data require a separate backup and recovery procedure.
 
 ## Local HTTP development
 
@@ -171,19 +213,26 @@ PYTHONPATH=app/src app/.venv/bin/python -m unittest discover \
   -s app/tests -p 'test_readiness.py' -v
 ```
 
-## Implementation sequence
+## Delivery milestones
 
-1. Implement domain rules and unit tests.
-2. Add PostgreSQL persistence and concurrency tests.
-3. Add the HTTP API and authorization tests.
-4. Integrate OIDC authentication before exposing business endpoints
-   in the shared lab.
-5. Containerize and deploy the application.
-6. Add CI security checks and demonstrate failure, remediation,
-   and successful delivery.
+Completed locally:
 
-Unit tests may use synthetic identities. They must not introduce a
-production authentication bypass.
+1. Domain rules and PostgreSQL persistence.
+2. Concurrency protection and database permission checks.
+3. HTTP endpoints and role-based authorization.
+4. Keycloak integration and token validation.
+5. Fresh realm import validation.
+
+Next:
+
+1. Build and run the API container image.
+2. Automate tests and security checks in CI.
+3. Publish the image and introduce signing and verification.
+4. Deploy the application to Kubernetes.
+
+Automated tests use controlled identities and mocked dependencies where
+appropriate. These test mechanisms do not provide an authentication
+bypass in the running application.
 
 ## Later extensions
 

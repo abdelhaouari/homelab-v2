@@ -25,9 +25,30 @@ services:
       retries: 12
       start_period: 10s
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+
+    command:
+      - start-dev
+      - --db=dev-file
+      - --hostname=http://localhost:8080
+      - --import-realm
+
+    env_file:
+      - path: ../private/keycloak-admin.env
+        format: raw
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak:/opt/keycloak/data/import:ro
+
 secrets:
   postgres_password:
     file: ../private/postgres-password.txt
 
 volumes:
   postgres_data:
+  keycloak_data:

@@ -153,3 +153,36 @@ def record_decision(
         raise ConflictError("The request changed before the decision was saved.")
 
     return _to_request(row)
+
+
+def list_requests(
+    connection: psycopg.Connection,
+    actor: Actor,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[PromotionRequest]:
+    """Read a bounded page of requests after checking read permissions."""
+    allowed_roles = {Role.READER, Role.DEVELOPER, Role.APPROVER}
+
+    if not actor.roles.intersection(allowed_roles):
+        raise AuthorizationError("A role with read access is required.")
+
+    if not 1 <= limit <= 100 or offset < 0:
+        raise ValueError("Invalid pagination parameters.")
+
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            """
+            SELECT
+                id, image_repository, image_digest, target,
+                requested_by, status, created_at,
+                decided_by, decided_at
+            FROM public.promotion_requests
+            ORDER BY created_at DESC, id
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
+        )
+        rows = cursor.fetchall()
+
+    return [_to_request(row) for row in rows]

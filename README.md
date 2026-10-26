@@ -4,7 +4,11 @@ A four-node Kubernetes homelab built on Proxmox VE, with Terraform provisioning,
 
 This project develops practical skills in infrastructure automation, Kubernetes operations, and platform security. The implemented foundation supports the next phase: deploying an application and demonstrating security controls throughout its delivery pipeline.
 
-**Current milestone:** one control plane and three workers are Ready. Cilium and CoreDNS are operational. Cross-node pod connectivity, internal DNS resolution, and HTTP access through a Kubernetes Service have been tested successfully.
+**Current milestone:** the four-node Kubernetes foundation is operational
+and its networking has been validated. A local FastAPI application now
+supports authenticated image promotion requests, role-based decisions,
+and PostgreSQL persistence. Application containerization and CI/CD are
+the next delivery milestones.
 
 ## What has been built
 
@@ -13,6 +17,37 @@ This project develops practical skills in infrastructure automation, Kubernetes 
 - **Kubernetes lifecycle operations:** kubeadm initializes the control plane; an Ansible playbook joins workers using short-lived bootstrap tokens without displaying their values.
 - **Cluster networking:** Cilium provides a VXLAN overlay using Kubernetes-assigned PodCIDRs, with kube-proxy retained for Service networking.
 - **Functional verification:** a reusable smoke test checks DNS, direct HTTP between pods on different workers, and HTTP through a ClusterIP Service.
+- **Application security:** a FastAPI promotion API integrates Keycloak,
+  OIDC authentication, access token validation, and role-based authorization.
+- **Data integrity:** PostgreSQL constraints, restricted database permissions,
+  and conditional updates protect request records and prevent competing
+  decisions from overwriting each other.
+- **Security validation:** automated tests cover business rules, token
+  validation, HTTP authorization, persistence, and concurrent decisions.
+  Manual checks exercise real Keycloak login, PKCE rejection, and
+  authenticated API operations.
+
+## Artifact promotion application
+
+The application records requests to promote a container image digest
+to staging. Developers submit requests, approvers approve or reject
+them, and readers inspect the results. Requesters cannot approve or
+reject their own requests.
+
+A local CLI authenticates users through Keycloak using Authorization
+Code with PKCE S256. The API validates access tokens and derives user
+identities and permissions from verified claims.
+
+FastAPI currently runs in WSL, while PostgreSQL and Keycloak run in
+local Docker Compose containers. A versioned realm configuration was
+successfully imported into a fresh, disposable Keycloak instance.
+
+The application records approval decisions; it does not deploy images
+or verify their signatures, provenance, or scan results. Application
+deployment to Kubernetes and delivery-pipeline controls remain planned.
+
+See [application documentation](docs/application.md) for endpoints,
+authorization rules, validation evidence, and local configuration.
 
 ## Architecture
 
@@ -129,7 +164,18 @@ These checks establish basic cluster connectivity. They do not establish network
 │   ├── requirements.txt
 │   ├── requirements.yml
 │   └── site.yml
+├── app/
+│   ├── keycloak/
+│   ├── scripts/
+│   ├── sql/
+│   ├── src/promotion_api/
+│   ├── tests/
+│   ├── compose.yml
+│   ├── requirements.txt
+│   ├── requirements-cli.txt
+│   └── requirements-dev.txt
 ├── docs/
+│   ├── application.md
 │   ├── architecture.md
 │   ├── proxmox-bootstrap.md
 │   └── rebuild.md
@@ -184,10 +230,13 @@ infrastructure does not recover application data.
 
 ## Next milestones
 
-1. Validate the consolidated workflow through a complete rebuild from fresh VMs.
-2. Deploy a small application with tests and documented authorization rules.
-3. Build a CI/CD pipeline with secret scanning, SAST, dependency scanning, and DAST.
-4. Demonstrate a failing security control, a corrective change, and a successful delivery.
-5. Add workload identity, software supply-chain controls, and tested recovery procedures as the application evolves.
+1. Containerize the promotion API and validate its runtime configuration.
+2. Automate tests, secret scanning, SAST, and dependency scanning in CI.
+3. Build and publish the application image, then introduce image signing
+   and verification.
+4. Deploy the application to Kubernetes and validate access, configuration,
+   and health probes.
+5. Demonstrate a failing security control, remediation, and successful delivery.
+6. Validate infrastructure rebuilds, data recovery, and workload isolation.
 
 These are planned extensions, not completed capabilities.
