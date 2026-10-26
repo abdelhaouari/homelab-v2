@@ -56,6 +56,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install security tools
+        run: |
+          python -m pip install -r app/requirements-security.txt
+          python -m pip check
+
+      - name: Scan Python code with Bandit
+        run: |
+          python -m bandit \
+            -r app/src app/scripts \
+            --severity-level all \
+            --confidence-level all
+
       - name: Install test dependencies
         run: |
           python -m pip install -r app/requirements-dev.txt

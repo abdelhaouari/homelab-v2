@@ -149,7 +149,8 @@ def main():
 
     with OAuth2Client(
         client_id=CLIENT_ID,
-        token_endpoint_auth_method="none",
+        # Public OAuth client without a client secret; uses PKCE S256.
+        token_endpoint_auth_method="none", # nosec B106
         redirect_uri=REDIRECT_URI,
         scope="openid",
         code_challenge_method="S256",
