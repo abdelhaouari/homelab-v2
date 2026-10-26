@@ -19,20 +19,22 @@ Implemented capabilities:
   decisions from overwriting each other.
 - Liveness and database readiness endpoints.
 - A versioned Keycloak realm configuration for fresh installations.
+- Browser frontend with Keycloak login, paginated requests, request
+  details, developer submission, and approver decisions.
 
 Automated validation completed in separate runs:
 
-| Test suite | Passed | Scope |
-| ---------- | -----: | ----- |
-| Domain | 10 | Business rules |
-| PostgreSQL repository | 10 | Persistence and permissions |
-| Concurrent decisions | 1 | Two competing database transactions |
-| SQL checks | 5 | Schema constraints |
-| Liveness | 1 | HTTP response |
-| Readiness | 3 | Simulated database outcomes |
-| ID token validation | 7 | Signed tokens with controlled keys and claims |
-| API authentication | 8 | Access token validation through HTTP |
-| HTTP routes | 9 | Authorization and input validation with mocked database access |
+| Test suite            | Passed | Scope                                                          |
+| --------------------- | -----: | -------------------------------------------------------------- |
+| Domain                |     10 | Business rules                                                 |
+| PostgreSQL repository |     10 | Persistence and permissions                                    |
+| Concurrent decisions  |      1 | Two competing database transactions                            |
+| SQL checks            |      5 | Schema constraints                                             |
+| Liveness              |      1 | HTTP response                                                  |
+| Readiness             |      3 | Simulated database outcomes                                    |
+| ID token validation   |      7 | Signed tokens with controlled keys and claims                  |
+| API authentication    |      8 | Access token validation through HTTP                           |
+| HTTP routes           |      9 | Authorization and input validation with mocked database access |
 
 Manual end-to-end validation:
 
@@ -124,15 +126,15 @@ above covers specific scenarios; it is not an exhaustive security audit.
 
 ## HTTP endpoints
 
-| Method | Path | Purpose | Access |
-| ------ | ---- | ------- | ------ |
-| GET | /healthz | Application liveness | Public |
-| GET | /readyz | Database connectivity and query execution | Public |
-| GET | /me | Verified identity and application roles | Authenticated |
-| POST | /promotion-requests | Submit a request | Developer |
-| GET | /promotion-requests | List requests with bounded pagination | Reader, developer, approver |
-| GET | /promotion-requests/{id} | Inspect a request | Reader, developer, approver |
-| POST | /promotion-requests/{id}/decision | Approve or reject a pending request | Approver, excluding the requester |
+| Method | Path                              | Purpose                                   | Access                            |
+| ------ | --------------------------------- | ----------------------------------------- | --------------------------------- |
+| GET    | /healthz                          | Application liveness                      | Public                            |
+| GET    | /readyz                           | Database connectivity and query execution | Public                            |
+| GET    | /me                               | Verified identity and application roles   | Authenticated                     |
+| POST   | /promotion-requests               | Submit a request                          | Developer                         |
+| GET    | /promotion-requests               | List requests with bounded pagination     | Reader, developer, approver       |
+| GET    | /promotion-requests/{id}          | Inspect a request                         | Reader, developer, approver       |
+| POST   | /promotion-requests/{id}/decision | Approve or reject a pending request       | Approver, excluding the requester |
 
 Health endpoints return minimal status information without credentials
 or internal error details.
@@ -152,8 +154,8 @@ and the exact redirect URI http://127.0.0.1:8765/callback.
 It has no client secret.
 
 The promotion-api client defines the reader, developer, and approver
-roles. An audience mapper includes promotion-api in access tokens
-issued to the CLI.
+roles. Audience mappers include promotion-api in access tokens
+issued to the CLI and browser clients.
 
 The CLI validates ID tokens for promotion-cli. The API validates access
 tokens for promotion-api and derives the actor from the verified subject
@@ -213,6 +215,58 @@ PYTHONPATH=app/src app/.venv/bin/python -m unittest discover \
   -s app/tests -p 'test_readiness.py' -v
 ```
 
+## Local browser frontend
+
+The frontend uses JavaScript, Vite, and the official keycloak-js adapter.
+It reuses the existing API endpoints and business rules.
+
+The promotion-web public client uses Authorization Code with PKCE S256.
+Its login and post-logout redirect URI is http://localhost:5173/.
+Its allowed web origin is http://localhost:5173.
+
+Access and refresh tokens remain in adapter memory. API requests send
+the access token in the Authorization header. The interface obtains
+the current subject and roles from /me. API authorization remains
+mandatory regardless of which controls are visible in the browser.
+
+Start PostgreSQL, Keycloak, and the API using the existing local
+configuration. In a separate terminal, from the repository root:
+
+```bash
+cd app/frontend
+npm ci
+npm run dev
+```
+
+Open http://localhost:5173/. Vite uses a fixed port and proxies /me
+and /promotion-requests to the API at http://127.0.0.1:8000.
+
+To compile the frontend:
+
+```bash
+npm run build
+```
+
+The generated dist directory and node_modules are excluded from Git.
+package-lock.json is versioned. Serving the compiled frontend from
+FastAPI remains part of the containerization milestone.
+
+Browser checks completed:
+
+- Developer login, API-verified identity, and logout.
+- Request listing and detail access for developer and reader roles.
+- Creation of two requests by the developer.
+- Approval of one request and rejection of another by a different user.
+- Reader access to both persisted decisions without write controls.
+
+The frontend build completed successfully. Browser checks were manual;
+there is no automated browser test suite. Error messages are implemented,
+but browser coverage of all error paths and pagination is not yet proven.
+
+The promotion-web client was configured in the running realm and added
+to the versioned JSON. The previous fresh-realm import test predates
+this client addition; the updated import has not been retested.
+
 ## Delivery milestones
 
 Completed locally:
@@ -222,10 +276,11 @@ Completed locally:
 3. HTTP endpoints and role-based authorization.
 4. Keycloak integration and token validation.
 5. Fresh realm import validation.
+6. Browser frontend and manual role-based workflow validation.
 
 Next:
 
-1. Build and run the API container image.
+1. Build and run one application image containing the API and compiled frontend.
 2. Automate tests and security checks in CI.
 3. Publish the image and introduce signing and verification.
 4. Deploy the application to Kubernetes.

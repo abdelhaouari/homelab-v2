@@ -1,0 +1,165 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #182538;
+  background: #f3f5f8;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 1050px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+section,
+form {
+  margin-top: 24px;
+  padding: 24px;
+  background: white;
+  border: 1px solid #d5dde7;
+  border-radius: 12px;
+}
+
+section section,
+section form {
+  background: #f8fafc;
+}
+
+[role="status"] {
+  overflow-wrap: anywhere;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  padding: 9px 14px;
+  border: 1px solid #526780;
+  border-radius: 6px;
+  color: #182538;
+  background: white;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #e8eff8;
+}
+
+button + button {
+  margin-left: 8px;
+}
+
+button:disabled {
+  color: #657184;
+  border-color: #d5dde7;
+  background: #edf0f4;
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+
+button[type="submit"] {
+  color: white;
+  background: #1e40af;
+  border-color: #1e40af;
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  background: #1e3a8a;
+}
+
+button[type="submit"]:disabled {
+  background: #64748b;
+  border-color: #64748b;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #8090a4;
+  border-radius: 6px;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+li + li {
+  margin-top: 10px;
+}
+
+li button {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px 20px;
+}
+
+dt {
+  font-weight: 600;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 600px) {
+  main {
+    padding: 20px 12px;
+  }
+
+  section,
+  form {
+    padding: 16px;
+  }
+
+  dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  dd {
+    margin-bottom: 12px;
+  }
+}

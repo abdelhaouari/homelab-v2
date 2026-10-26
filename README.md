@@ -5,10 +5,10 @@ A four-node Kubernetes homelab built on Proxmox VE, with Terraform provisioning,
 This project develops practical skills in infrastructure automation, Kubernetes operations, and platform security. The implemented foundation supports the next phase: deploying an application and demonstrating security controls throughout its delivery pipeline.
 
 **Current milestone:** the four-node Kubernetes foundation is operational
-and its networking has been validated. A local FastAPI application now
-supports authenticated image promotion requests, role-based decisions,
-and PostgreSQL persistence. Application containerization and CI/CD are
-the next delivery milestones.
+and its networking has been validated. A local FastAPI application and
+browser frontend support Keycloak login, image promotion requests,
+role-based decisions, and PostgreSQL persistence. Application
+containerization and CI/CD are the next delivery milestones.
 
 ## What has been built
 
@@ -34,13 +34,16 @@ to staging. Developers submit requests, approvers approve or reject
 them, and readers inspect the results. Requesters cannot approve or
 reject their own requests.
 
-A local CLI authenticates users through Keycloak using Authorization
-Code with PKCE S256. The API validates access tokens and derives user
-identities and permissions from verified claims.
+A browser frontend and a local CLI authenticate users through Keycloak
+using Authorization Code with PKCE S256. The frontend supports request
+listing, details, submission, approval, and rejection. The API validates
+access tokens and derives identities and permissions from verified claims.
 
 FastAPI currently runs in WSL, while PostgreSQL and Keycloak run in
-local Docker Compose containers. A versioned realm configuration was
-successfully imported into a fresh, disposable Keycloak instance.
+local Docker Compose containers. The initial realm configuration was successfully imported into a fresh,
+disposable Keycloak instance. The subsequently added browser client has
+been validated against the running realm; a fresh import of the updated
+configuration remains untested.
 
 The application records approval decisions; it does not deploy images
 or verify their signatures, provenance, or scan results. Application
@@ -166,6 +169,7 @@ These checks establish basic cluster connectivity. They do not establish network
 │   └── site.yml
 ├── app/
 │   ├── keycloak/
+|   ├── frontend/
 │   ├── scripts/
 │   ├── sql/
 │   ├── src/promotion_api/
@@ -230,7 +234,7 @@ infrastructure does not recover application data.
 
 ## Next milestones
 
-1. Containerize the promotion API and validate its runtime configuration.
+1. Containerize the API and compiled frontend together and validate runtime configuration.
 2. Automate tests, secret scanning, SAST, and dependency scanning in CI.
 3. Build and publish the application image, then introduce image signing
    and verification.
