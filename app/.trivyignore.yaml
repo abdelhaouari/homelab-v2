@@ -1,0 +1,78 @@
+vulnerabilities:
+  - id: CVE-2026-16742
+    purls:
+      - pkg:deb/debian/libsystemd0
+      - pkg:deb/debian/libudev1
+    expired_at: 2026-11-09
+    statement: >-
+      Homelab exception. systemd-homed was not found in the inspected
+      runtime locations. See docs/container-security.md.
+
+  - id: CVE-2026-9538
+    purls:
+      - pkg:deb/debian/perl-base
+    expired_at: 2026-11-09
+    statement: >-
+      Homelab exception. Archive/Tar.pm was not found in the inspected
+      runtime locations. See docs/container-security.md.
+
+  - id: CVE-2025-69720
+    purls:
+      - pkg:deb/debian/libncursesw6
+      - pkg:deb/debian/libtinfo6
+      - pkg:deb/debian/ncurses-base
+      - pkg:deb/debian/ncurses-bin
+    expired_at: 2026-11-09
+    statement: >-
+      Temporary homelab risk acceptance. infocmp is present but no explicit
+      application invocation was identified. See docs/container-security.md.
+
+  - id: CVE-2026-76642
+    purls: &util_linux_packages
+      - pkg:deb/debian/bsdutils
+      - pkg:deb/debian/libblkid1
+      - pkg:deb/debian/liblastlog2-2
+      - pkg:deb/debian/libmount1
+      - pkg:deb/debian/libsmartcols1
+      - pkg:deb/debian/libuuid1
+      - pkg:deb/debian/login
+      - pkg:deb/debian/mount
+      - pkg:deb/debian/util-linux
+    expired_at: 2026-11-09
+    statement: >-
+      Temporary homelab risk acceptance for privileged mount operations.
+      Requires the verified runtime restrictions.
+      See docs/container-security.md.
+
+  - id: CVE-2026-78408
+    purls: *util_linux_packages
+    expired_at: 2026-11-09
+    statement: >-
+      Temporary homelab risk acceptance. No explicit nsenter invocation
+      identified. Privileged administrative use is outside this exception.
+      See docs/container-security.md.
+
+  - id: CVE-2026-78409
+    purls: *util_linux_packages
+    expired_at: 2026-11-09
+    statement: >-
+      Temporary homelab risk acceptance for restricted mount operations.
+      Requires the verified runtime restrictions.
+      See docs/container-security.md.
+
+  - id: CVE-2026-78410
+    purls: *util_linux_packages
+    expired_at: 2026-11-09
+    statement: >-
+      Temporary homelab risk acceptance for restricted bind-mount operations.
+      Requires the verified runtime restrictions.
+      See docs/container-security.md.
+
+  - id: CVE-2026-54369
+    purls:
+      - pkg:deb/debian/libacl1
+    expired_at: 2026-11-09
+    statement: >-
+      Temporary homelab risk acceptance for privileged ACL operations.
+      Requires the verified runtime restrictions.
+      See docs/container-security.md.

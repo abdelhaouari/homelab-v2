@@ -169,6 +169,99 @@ jobs:
           print("Container HTTP checks passed.")
           PY
 
+      - name: Verify container security restrictions
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+
+          container = json.loads(subprocess.check_output(
+              ["docker", "inspect", "promotion-ci"],
+              text=True,
+          ))[0]
+
+          config = container["Config"]
+          host = container["HostConfig"]
+
+          checks = {
+              "non-root user": config["User"] == "10001:10001",
+              "not privileged": host["Privileged"] is False,
+              "read-only filesystem": host["ReadonlyRootfs"] is True,
+              "all capabilities dropped": "ALL" in (host["CapDrop"] or []),
+              "no added capabilities": not host["CapAdd"],
+              "no new privileges": any(
+                  option in ("no-new-privileges", "no-new-privileges:true")
+                  for option in (host["SecurityOpt"] or [])
+              ),
+          }
+
+          status_text = subprocess.check_output(
+              ["docker", "exec", "promotion-ci", "cat", "/proc/1/status"],
+              text=True,
+          )
+          status = dict(
+              line.split(":", 1)
+              for line in status_text.splitlines()
+              if ":" in line
+          )
+
+          checks["process UID"] = status["Uid"].split() == ["10001"] * 4
+          checks["process GID"] = status["Gid"].split() == ["10001"] * 4
+          checks["process NoNewPrivs"] = status["NoNewPrivs"].strip() == "1"
+
+          for field in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
+              checks[field] = int(status[field].strip(), 16) == 0
+
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit(
+                  "Container security checks failed: " + ", ".join(failed)
+              )
+
+          print("Container security restrictions verified.")
+          PY
+
+      - name: Scan application image
+        env:
+          TRIVY_IMAGE: aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+        run: |
+          scan_dir="$(mktemp -d "$RUNNER_TEMP/image-scan.XXXXXX")"
+          mkdir -p "$scan_dir/cache"
+
+          docker image save \
+            --output "$scan_dir/promotion.tar" \
+            homelab-promotion:ci
+
+          docker pull "$TRIVY_IMAGE"
+
+          trivy_image() {
+            docker run --rm \
+              --user "$(id -u):$(id -g)" \
+              --volume "$scan_dir:/scan:ro" \
+              --volume "$scan_dir/cache:/cache" \
+              --volume "$GITHUB_WORKSPACE/app/.trivyignore.yaml:/policy/ignore.yaml:ro" \
+              "$TRIVY_IMAGE" \
+              image \
+              --input /scan/promotion.tar \
+              --cache-dir /cache \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --timeout 10m \
+              "$@"
+          }
+
+          echo "Unfiltered HIGH and CRITICAL findings"
+          trivy_image \
+            --ignorefile /dev/null \
+            --exit-code 0
+
+          echo "Enforcing the time-limited exception policy"
+          trivy_image \
+            --skip-db-update \
+            --ignorefile /policy/ignore.yaml \
+            --show-suppressed \
+            --exit-code 1
+
       - name: Show container logs on failure
         if: failure()
         run: |
