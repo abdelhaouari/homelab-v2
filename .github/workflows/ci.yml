@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     timeout-minutes: 20
 
     defaults:
@@ -267,7 +268,13 @@ jobs:
             --show-suppressed \
             --exit-code 1
 
-      - name: Publish application image to GHCR
+      - name: Install Cosign
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.4
+
+      - name: Publish, sign and verify application image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -287,9 +294,33 @@ jobs:
           docker tag homelab-promotion:ci "$image_ref"
           docker push "$image_ref"
 
-          echo "Published image: $image_ref"
-          docker image inspect "$image_ref" \
-            --format '{{range .RepoDigests}}{{println .}}{{end}}'
+          digest_ref="$(
+            docker image inspect "$image_ref" \
+              --format '{{range .RepoDigests}}{{println .}}{{end}}' |
+              awk -v prefix="$image_name@sha256:" \
+                'index($0, prefix) == 1'
+          )"
+
+          digest="${digest_ref#"$image_name@"}"
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Unable to determine a unique published image digest." >&2
+            exit 1
+          fi
+
+          echo "Published image: $digest_ref"
+          cosign version
+
+          cosign sign --yes "$digest_ref"
+
+          cosign verify \
+            --certificate-identity \
+              "https://github.com/abdelhaouari/homelab-v2/.github/workflows/ci.yml@refs/heads/main" \
+            --certificate-oidc-issuer \
+              "https://token.actions.githubusercontent.com" \
+            "$digest_ref"
+
+          printf '### Signed application image\n\n`%s`\n' \
+            "$digest_ref" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Show container logs on failure
         if: failure()
