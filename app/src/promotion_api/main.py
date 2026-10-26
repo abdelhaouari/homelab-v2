@@ -5,7 +5,10 @@ from fastapi.responses import JSONResponse
 from typing import Annotated
 
 from fastapi import Depends
+from pathlib import Path
 
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from promotion_api.authentication import get_current_actor
 from promotion_api.domain import Actor
 from promotion_api.routes import router as promotion_router
@@ -60,3 +63,20 @@ def read_current_identity(
         "subject": actor.subject,
         "roles": sorted(role.value for role in actor.roles),
     }
+
+
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+if (FRONTEND_DIST / "index.html").is_file():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=FRONTEND_DIST / "assets"),
+        name="frontend-assets",
+    )
+
+    @app.get("/", include_in_schema=False)
+    def read_frontend() -> FileResponse:
+        return FileResponse(
+            FRONTEND_DIST / "index.html",
+            headers={"Cache-Control": "no-store"},
+        )

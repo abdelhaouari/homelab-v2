@@ -5,10 +5,9 @@ A four-node Kubernetes homelab built on Proxmox VE, with Terraform provisioning,
 This project develops practical skills in infrastructure automation, Kubernetes operations, and platform security. The implemented foundation supports the next phase: deploying an application and demonstrating security controls throughout its delivery pipeline.
 
 **Current milestone:** the four-node Kubernetes foundation is operational
-and its networking has been validated. A local FastAPI application and
-browser frontend support Keycloak login, image promotion requests,
-role-based decisions, and PostgreSQL persistence. Application
-containerization and CI/CD are the next delivery milestones.
+and its networking has been validated. The FastAPI application and compiled
+browser frontend run together in Docker Compose, with Keycloak authentication
+and PostgreSQL persistence. CI/CD and image security controls are next.
 
 ## What has been built
 
@@ -39,8 +38,11 @@ using Authorization Code with PKCE S256. The frontend supports request
 listing, details, submission, approval, and rejection. The API validates
 access tokens and derives identities and permissions from verified claims.
 
-FastAPI currently runs in WSL, while PostgreSQL and Keycloak run in
-local Docker Compose containers. The initial realm configuration was successfully imported into a fresh,
+FastAPI serves the API and compiled frontend from one application container.
+PostgreSQL and Keycloak run as separate Docker Compose services.
+Direct execution in WSL remains available for development.
+
+The initial realm configuration was successfully imported into a fresh,
 disposable Keycloak instance. The subsequently added browser client has
 been validated against the running realm; a fresh import of the updated
 configuration remains untested.
@@ -234,13 +236,12 @@ infrastructure does not recover application data.
 
 ## Next milestones
 
-1. Containerize the API and compiled frontend together and validate runtime configuration.
-2. Automate tests, secret scanning, SAST, and dependency scanning in CI.
-3. Build and publish the application image, then introduce image signing
+1. Automate tests, secret scanning, SAST, and dependency scanning in CI.
+2. Build and publish the application image, then introduce image signing
    and verification.
-4. Deploy the application to Kubernetes and validate access, configuration,
+3. Deploy the application to Kubernetes and validate access, configuration,
    and health probes.
-5. Demonstrate a failing security control, remediation, and successful delivery.
-6. Validate infrastructure rebuilds, data recovery, and workload isolation.
+4. Demonstrate a failing security control, remediation, and successful delivery.
+5. Validate infrastructure rebuilds, data recovery, and workload isolation.
 
 These are planned extensions, not completed capabilities.

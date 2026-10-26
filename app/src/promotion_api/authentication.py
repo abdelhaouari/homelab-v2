@@ -9,18 +9,19 @@ from jwt.exceptions import PyJWKClientConnectionError
 
 from promotion_api.domain import Actor, Role
 
-
 ISSUER = os.environ.get(
     "PROMOTION_OIDC_ISSUER",
     "http://localhost:8080/realms/homelab",
 )
 AUDIENCE = "promotion-api"
 
-bearer = HTTPBearer(auto_error=False)
-jwks_client = PyJWKClient(
+JWKS_URL = os.environ.get(
+    "PROMOTION_OIDC_JWKS_URL",
     f"{ISSUER}/protocol/openid-connect/certs",
-    timeout=5,
 )
+
+bearer = HTTPBearer(auto_error=False)
+jwks_client = PyJWKClient(JWKS_URL, timeout=5)
 
 
 def actor_from_access_token(token: str) -> Actor:
@@ -72,9 +73,7 @@ def actor_from_access_token(token: str) -> Actor:
         raise jwt.InvalidTokenError("Invalid roles.")
 
     known_roles = {role.value: role for role in Role}
-    roles = frozenset(
-        known_roles[name] for name in role_names if name in known_roles
-    )
+    roles = frozenset(known_roles[name] for name in role_names if name in known_roles)
 
     return Actor(subject=claims["sub"], roles=roles)
 

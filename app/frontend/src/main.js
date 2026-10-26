@@ -8,7 +8,7 @@ const keycloak = new Keycloak({
   clientId: "promotion-web",
 });
 
-const redirectUri = "http://localhost:5173/";
+const redirectUri = `${window.location.origin}/`;
 const status = document.querySelector("#status");
 const loginButton = document.querySelector("#login");
 const logoutButton = document.querySelector("#logout");

@@ -50,9 +50,11 @@ Manual end-to-end validation:
 - A disposable Keycloak instance imported the versioned realm and
   served its OIDC discovery document.
 
-FastAPI runs directly in WSL. PostgreSQL and Keycloak run in local
-Docker Compose containers. The application is not yet containerized
-or deployed to Kubernetes. CI/CD and image signing remain planned.
+The API and compiled frontend run together in a local Docker Compose
+container. PostgreSQL and Keycloak run as separate services.
+Direct execution in WSL remains available for development.
+CI/CD, image signing, and application deployment to Kubernetes
+remain planned.
 
 The API records promotion decisions. It does not deploy images or
 verify their existence, signatures, provenance, or scan results.
@@ -221,8 +223,9 @@ The frontend uses JavaScript, Vite, and the official keycloak-js adapter.
 It reuses the existing API endpoints and business rules.
 
 The promotion-web public client uses Authorization Code with PKCE S256.
-Its login and post-logout redirect URI is http://localhost:5173/.
-Its allowed web origin is http://localhost:5173.
+Its login and post-logout redirect URIs are http://localhost:5173/
+and http://localhost:8000/. Its allowed web origins are
+http://localhost:5173 and http://localhost:8000.
 
 Access and refresh tokens remain in adapter memory. API requests send
 the access token in the Authorization header. The interface obtains
@@ -248,8 +251,12 @@ npm run build
 ```
 
 The generated dist directory and node_modules are excluded from Git.
-package-lock.json is versioned. Serving the compiled frontend from
-FastAPI remains part of the containerization milestone.
+package-lock.json is versioned.
+
+FastAPI serves the compiled frontend at / and its assets at /assets.
+The browser uses its current origin for login and logout redirects.
+The browser client allows both localhost:5173 for Vite development
+and localhost:8000 for the application container.
 
 Browser checks completed:
 
@@ -267,6 +274,66 @@ The promotion-web client was configured in the running realm and added
 to the versioned JSON. The previous fresh-realm import test predates
 this client addition; the updated import has not been retested.
 
+## Local container execution
+
+The multi-stage Dockerfile builds the frontend with Node and copies
+the compiled assets into the Python runtime image. Node and frontend
+build dependencies are not included in the runtime image.
+
+The application runs as UID/GID 10001:10001. Application files remain
+root-owned and readable by the runtime user. Compose configures a
+read-only root filesystem, drops all Linux capabilities, and enables
+no-new-privileges.
+
+The application connects to PostgreSQL at postgres:5432.
+PROMOTION_OIDC_ISSUER remains http://localhost:8080/realms/homelab,
+matching the issuer used by the browser. PROMOTION_OIDC_JWKS_URL
+uses the internal Keycloak service address to retrieve public keys.
+Signature, issuer, audience, and role validation remain enforced.
+
+The database password is mounted at /run/secrets/promotion_app_password.
+It is not included in the image. For the validated local Docker setup,
+the source file grants read access to UID 10001 through a filesystem ACL:
+
+```bash
+setfacl -m u:10001:r-- private/promotion-app-password.txt
+```
+
+The acl package provides setfacl. Replacing the password file may require
+reapplying this ACL. Compose file-backed secrets remain local plaintext
+files; this setup does not provide an encrypted secret store.
+
+With the existing database, users, and Keycloak configuration prepared,
+run from the repository root:
+
+```bash
+docker compose -f app/compose.yml config --quiet
+docker compose -f app/compose.yml up -d --build app
+```
+
+Stop any standalone Uvicorn process using port 8000 first.
+Open http://localhost:8000/.
+
+Validated in the containerized setup:
+
+- Liveness returned HTTP 200.
+- Database readiness returned HTTP 200.
+- /me without a token returned HTTP 401.
+- Browser login, API-verified developer identity, request listing,
+  detail access, and logout worked.
+
+Creation and approval/rejection were validated before containerization;
+those write scenarios have not yet been repeated in the container.
+
+Uvicorn access logging is disabled to avoid recording OIDC callback
+URLs that may contain authorization codes. Startup and error logs remain
+available. Compose waits for PostgreSQL health, but Keycloak being started
+does not guarantee authentication readiness.
+
+Base image tags and transitive Python dependencies are not fully locked
+by digest or hashes. Image scanning, signing, and registry publication
+remain delivery milestones.
+
 ## Delivery milestones
 
 Completed locally:
@@ -277,13 +344,13 @@ Completed locally:
 4. Keycloak integration and token validation.
 5. Fresh realm import validation.
 6. Browser frontend and manual role-based workflow validation.
+7. Container image build and local execution of the API and compiled frontend.
 
 Next:
 
-1. Build and run one application image containing the API and compiled frontend.
-2. Automate tests and security checks in CI.
-3. Publish the image and introduce signing and verification.
-4. Deploy the application to Kubernetes.
+1. Automate tests and security checks in CI.
+2. Publish the image and introduce signing and verification.
+3. Deploy the application to Kubernetes.
 
 Automated tests use controlled identities and mocked dependencies where
 appropriate. These test mechanisms do not provide an authentication

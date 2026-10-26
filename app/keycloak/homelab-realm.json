@@ -112,10 +112,12 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "redirectUris": [
-        "http://localhost:5173/"
+        "http://localhost:5173/",
+        "http://localhost:8000/"
       ],
       "webOrigins": [
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "http://localhost:8000"
       ],
       "defaultClientScopes": [
         "web-origins",
@@ -134,7 +136,7 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5173/"
+        "post.logout.redirect.uris": "http://localhost:5173/##http://localhost:8000/"
       },
       "protocolMappers": [
         {

@@ -45,9 +45,44 @@ services:
       - keycloak_data:/opt/keycloak/data
       - ./keycloak:/opt/keycloak/data/import:ro
 
+  app:
+    image: homelab-promotion:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    environment:
+      PROMOTION_DB_HOST: postgres
+      PROMOTION_DB_PORT: "5432"
+      PROMOTION_DB_NAME: promotion
+      PROMOTION_DB_USER: promotion_app
+      PROMOTION_DB_PASSWORD_FILE: /run/secrets/promotion_app_password
+      PROMOTION_OIDC_ISSUER: http://localhost:8080/realms/homelab
+      PROMOTION_OIDC_JWKS_URL: http://keycloak:8080/realms/homelab/protocol/openid-connect/certs
+
+    secrets:
+      - promotion_app_password
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
 secrets:
   postgres_password:
     file: ../private/postgres-password.txt
+  promotion_app_password:
+    file: ../private/promotion-app-password.txt
 
 volumes:
   postgres_data:
