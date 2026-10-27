@@ -1,0 +1,16 @@
+# Helm chart: kyverno/kyverno 3.9.2
+# Application: Kyverno 1.19.2
+# Single-replica homelab configuration, not highly available.
+# Kubernetes 1.36 compatibility must be validated in this lab.
+
+admissionController:
+  replicas: 1
+
+backgroundController:
+  replicas: 1
+
+cleanupController:
+  replicas: 1
+
+reportsController:
+  replicas: 1

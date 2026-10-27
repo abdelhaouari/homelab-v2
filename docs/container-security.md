@@ -86,3 +86,27 @@ https://security-tracker.debian.org/tracker/CVE-2026-54369
 
 A passing gate means that no unexcepted HIGH or CRITICAL findings remain.
 It does not mean that the image has no vulnerabilities.
+
+## Kubernetes admission validation
+
+Validated on 2026-10-26 with:
+
+- Kubernetes v1.36.5.
+- Kyverno v1.19.2, Helm chart 3.9.2.
+- Cosign v3.1.4 signing in GitHub Actions.
+- Public image and signature storage in GHCR.
+
+The ImageValidatingPolicy is restricted to the signature-test namespace.
+
+Server-side dry-run results:
+
+- Signed image with the expected workflow identity: accepted.
+- Unsigned image: denied by the image verification policy.
+- Signed image with a deliberately incorrect expected identity: denied.
+
+The expected identity was restored after testing:
+https://github.com/abdelhaouari/homelab-v2/.github/workflows/ci.yml@refs/heads/main
+
+These tests validate admission behavior, not application runtime.
+Kubernetes v1.36 is outside the published Kyverno v1.19 support matrix.
+This is a successful homelab compatibility test, not an upstream support claim.

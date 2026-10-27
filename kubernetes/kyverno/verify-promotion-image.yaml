@@ -1,0 +1,47 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-promotion-image
+spec:
+  validationActions:
+    - Deny
+
+  failurePolicy: Fail
+
+  webhookConfiguration:
+    timeoutSeconds: 30
+
+  evaluation:
+    background:
+      enabled: false
+
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: signature-test
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+
+  matchImageReferences:
+    - glob: "*"
+
+  attestors:
+    - name: github
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: https://github.com/abdelhaouari/homelab-v2/.github/workflows/ci.yml@refs/heads/main
+        ctlog:
+          url: https://rekor.sigstore.dev
+
+  validations:
+    - expression: >-
+        images.containers
+          .map(image, verifyImageSignatures(image, [attestors.github]))
+          .all(result, result > 0)
+      message: >-
+        Container images must be signed by the homelab-v2 CI workflow on main.
