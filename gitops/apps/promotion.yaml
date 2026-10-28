@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promotion
+  namespace: argocd
+spec:
+  project: workloads
+  source:
+    repoURL: https://github.com/abdelhaouari/homelab-v2.git
+    targetRevision: main
+    path: gitops/manifests/promotion
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: promotion
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+      selfHeal: true

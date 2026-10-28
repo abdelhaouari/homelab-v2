@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+configMapGenerator:
+  - name: promotion-schema
+    files:
+      - 001_create_promotion_requests.sql
+      - 002_create_application_role.sql
