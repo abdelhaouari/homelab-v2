@@ -8,6 +8,7 @@ resources:
   - ../../../app/keycloak
   - postgres.yaml
   - keycloak.yaml
+  - application.yaml
 
 configMapGenerator:
   - name: postgres-init
