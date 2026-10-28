@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-admin
+  namespace: argocd
+spec:
+  description: Manage child Argo CD Applications for Homelab V2.
+  sourceRepos:
+    - https://github.com/abdelhaouari/homelab-v2.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: argoproj.io
+      kind: Application

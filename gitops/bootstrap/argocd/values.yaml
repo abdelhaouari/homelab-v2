@@ -1,0 +1,36 @@
+# Helm chart: argo/argo-cd 10.11.6
+# Application: Argo CD v3.5.6
+# Single-replica homelab installation.
+# Initial access uses a localhost port-forward with server TLS enabled.
+
+controller:
+  replicas: 1
+
+server:
+  replicas: 1
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+
+repoServer:
+  replicas: 1
+
+redis-ha:
+  enabled: false
+
+redis:
+  enabled: true
+
+dex:
+  enabled: false
+
+applicationSet:
+  replicas: 0
+
+notifications:
+  enabled: false
+
+configs:
+  params:
+    server.insecure: false
