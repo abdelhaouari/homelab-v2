@@ -5,6 +5,7 @@ namespace: promotion
 
 resources:
   - ../../../app/sql
+  - postgres.yaml
 
 configMapGenerator:
   - name: postgres-init
