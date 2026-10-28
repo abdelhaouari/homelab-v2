@@ -5,7 +5,9 @@ namespace: promotion
 
 resources:
   - ../../../app/sql
+  - ../../../app/keycloak
   - postgres.yaml
+  - keycloak.yaml
 
 configMapGenerator:
   - name: postgres-init
