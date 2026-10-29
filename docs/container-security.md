@@ -110,3 +110,89 @@ https://github.com/abdelhaouari/homelab-v2/.github/workflows/ci.yml@refs/heads/m
 These tests validate admission behavior, not application runtime.
 Kubernetes v1.36 is outside the published Kyverno v1.19 support matrix.
 This is a successful homelab compatibility test, not an upstream support claim.
+
+## Promotion namespace image admission
+
+Two ImageValidatingPolicy resources enforce image admission in `promotion`:
+
+| Policy | Scope |
+|--------|-------|
+| `verify-promotion-workloads` | Pods and automatically generated controller rules |
+| `verify-promotion-workloads-ephemeral` | Updates through `pods/ephemeralcontainers` |
+
+The policies are applied explicitly from `kubernetes/kyverno/`.
+They are not managed by the workloads Argo CD Application.
+
+### Trust rules
+
+Application images must reference
+`ghcr.io/abdelhaouari/homelab-v2@sha256:<digest>` and pass keyless
+signature verification with:
+
+- Issuer: `https://token.actions.githubusercontent.com`
+- Identity: `https://github.com/abdelhaouari/homelab-v2/.github/workflows/ci.yml@refs/heads/main`
+
+PostgreSQL and Keycloak are admitted through an exact image-reference
+allowlist containing their validated digests. Their vendor signatures
+are not verified by these policies.
+
+Other image references are denied. Updating a vendor image requires
+reviewing and updating both policies as well as its workload manifest.
+
+The allowlist applies throughout the namespace. It does not bind an
+approved image to a specific Deployment or container name.
+
+### Configuration details
+
+Both policies use `Deny` and `failurePolicy: Fail`.
+Image references are not automatically rewritten to digests.
+
+`required: false` disables the additional requirement that every image
+undergo signature or attestation verification. The CEL expression still
+requires signature verification for application images and permits only
+the exact vendor image references otherwise.
+
+The expression combines ordinary, init and ephemeral container images.
+Checking only `images.containers` did not cover init containers.
+
+Matching `pods` and `pods/ephemeralcontainers` together resulted in no
+generated controller configurations in the tested installation.
+Separate policies restored Deployment admission checks while preserving
+ephemeral-container checks.
+
+### Observed admission tests
+
+All tests used server-side dry-run; no test workload or ephemeral
+container was created.
+
+| Test | Observed result |
+|------|-----------------|
+| Pod with signed application image | Allowed |
+| Pod with approved PostgreSQL digest | Allowed |
+| Pod with approved Keycloak digest | Allowed |
+| Pod with unsigned application digest | Denied |
+| Pod with an unapproved tag-only image | Denied for missing digest |
+| Signed application with forbidden digest-pinned init container | Denied |
+| Signed application with signed init container | Allowed |
+| Deployment with signed application image | Allowed |
+| Deployment with forbidden digest-pinned image | Denied |
+| Signed ephemeral container | Allowed |
+| Forbidden digest-pinned ephemeral container | Denied |
+
+Negative tests checked the policy denial message rather than treating
+every nonzero command exit code as a successful security test.
+
+### Limits
+
+Background evaluation is disabled. Installing a policy does not evict
+existing Pods or prove that every running workload was admitted under it.
+
+Deployment admission was tested explicitly. Other generated controller
+types were not individually tested.
+
+These checks do not prove vulnerability freedom, runtime isolation,
+backup readiness or protection against a cluster administrator who can
+modify the policies.
+
+Keep both policies' trust rules synchronized when changing the allowlist
+or accepted signing identity.

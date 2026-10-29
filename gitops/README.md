@@ -231,8 +231,18 @@ The application image was built, tested, scanned, published to GHCR,
 signed by CI and independently verified. Its Deployment uses the
 verified digest. PostgreSQL and Keycloak are also pinned by digest.
 
-The Kyverno signature policy currently applies only to `signature-test`.
-Signature enforcement in `promotion` is not configured yet.
+Kyverno enforces image admission in `promotion`:
+- Application images must use a digest and a valid signature from the
+  homelab-v2 CI workflow on main.
+- PostgreSQL and Keycloak are allowed only at explicitly approved digests.
+- Other images are denied.
+
+Separate policies cover Pods and generated controller rules, and the
+`pods/ephemeralcontainers` subresource. The original policy remains in
+`signature-test`.
+
+These platform policies are applied explicitly from `kubernetes/kyverno/`;
+they are not managed by the workloads Argo CD Application.
 
 A valid signature identifies an accepted signer and image digest.
 It does not prove that an image has no vulnerabilities.

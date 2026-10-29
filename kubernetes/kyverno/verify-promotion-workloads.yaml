@@ -1,0 +1,67 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-promotion-workloads
+spec:
+  validationActions:
+    - Deny
+
+  failurePolicy: Fail
+
+  webhookConfiguration:
+    timeoutSeconds: 30
+
+  evaluation:
+    background:
+      enabled: false
+
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: promotion
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+
+  matchImageReferences:
+    - glob: "*"
+
+  validationConfigurations:
+    mutateDigest: false
+    verifyDigest: true
+    # CEL explicitly allows pinned vendor images and verifies app signatures.
+    required: false
+
+  attestors:
+    - name: github
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: https://github.com/abdelhaouari/homelab-v2/.github/workflows/ci.yml@refs/heads/main
+        ctlog:
+          url: https://rekor.sigstore.dev
+
+  validations:
+    - expression: >-
+        (
+          images.containers
+          + images.?initContainers.orValue([])
+          + images.?ephemeralContainers.orValue([])
+        ).all(image,
+          image in [
+            'docker.io/library/postgres@sha256:5c4783a8cc3f0074912164f94dfa1be4e043438f0f707cf968d7af9a0d31a2c8',
+            'quay.io/keycloak/keycloak@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b'
+          ]
+          ? true
+          : (
+            image.matches('^ghcr[.]io/abdelhaouari/homelab-v2@sha256:[a-f0-9]{64}$')
+            ? verifyImageSignatures(image, [attestors.github]) > 0
+            : false
+          )
+        )
+      message: >-
+        Images must use an approved third-party digest or a homelab-v2
+        application digest signed by the CI workflow on main.
