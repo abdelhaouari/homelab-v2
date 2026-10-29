@@ -1,23 +1,32 @@
 # GitOps application deployments
 
-This directory contains the deployment configuration for applications
-intended to be managed by Argo CD in Homelab V2.
+Argo CD manages the promotion application stack from this directory
+using the app-of-apps pattern.
 
-Application source code lives in `../app/`.
-Cluster bootstrap configuration and platform tests also exist in
-`../kubernetes/`; they are not automatically managed by Argo CD.
+Application source code lives in `../app/`. Cluster bootstrap resources
+and platform tests also exist in `../kubernetes/`; they are not
+automatically managed by Argo CD.
 
-## Current status
+## Validated state
 
-- Argo CD is installed with versioned Helm values.
-- The ApplicationSet controller is scaled to zero.
-- The GitOps directory structure is prepared.
-- AppProjects and the root Application are defined and passed server-side
-  dry-run validation. They have not been applied yet.
-- The promotion stack is not deployed through Argo CD yet.
+- Argo CD Applications `homelab-apps` and `promotion` reached
+  `Synced` and `Healthy`.
+- PostgreSQL, Keycloak and the promotion API are running in Kubernetes.
+- The API serves the compiled frontend.
+- Browser authentication through Keycloak works.
+- A developer created promotion requests.
+- An approver approved one request and rejected another.
+- A reader viewed an approved request.
+- PostgreSQL data survived replacement of its Pod using the same PVC.
+- The application database role authenticated over TCP and read its table.
+- The Keycloak database role authenticated over TCP.
 
-Directory contents alone do not enable reconciliation. Argo CD only
-manages resources selected by a configured Application.
+These observations validate the tested paths. They do not demonstrate
+high availability, node-loss recovery or a complete fresh-cluster rebuild.
+UI visibility alone does not prove server-side authorization enforcement.
+
+The application records promotion decisions. Approving a request does
+not deploy an image or verify its signature.
 
 ## Directory structure
 
@@ -25,173 +34,232 @@ manages resources selected by a configured Application.
 gitops/
 ├── README.md
 ├── bootstrap/
+│   ├── root-application.yaml
 │   └── argocd/
 │       └── values.yaml
 ├── projects/
+│   ├── gitops-admin.yaml
+│   └── workloads.yaml
 ├── apps/
+│   ├── kustomization.yaml
+│   └── promotion.yaml
 └── manifests/
     └── promotion/
+        ├── kustomization.yaml
         ├── namespace.yaml
-        └── init-postgres.sh
+        ├── init-postgres.sh
+        ├── postgres.yaml
+        ├── keycloak.yaml
+        └── application.yaml
 ```
 
-| Directory | Purpose |
-|-----------|---------|
-| `bootstrap/` | Configuration used to establish GitOps management |
-| `projects/` | AppProjects defining permitted sources, destinations and resource types |
-| `apps/` | Child Application definitions |
-| `manifests/` | Kubernetes resources and configuration inputs for each application |
+Kustomize also uses `app/sql/` and `app/keycloak/` from the repository
+root to generate ConfigMaps from the existing SQL scripts and realm
+configuration. These source files are not duplicated.
 
-The `projects/` directory contains `gitops-admin.yaml` and `workloads.yaml`.
-The `apps/kustomization.yaml` file explicitly selects child Applications;
-its resource list is currently empty.
-The root Application is defined in `bootstrap/root-application.yaml`.
-
-## Target reconciliation model
-
-The intended design uses the app-of-apps pattern:
+## Reconciliation model
 
 ```text
-Root Application
-  -> gitops/apps/
-     -> promotion Application
-        -> gitops/manifests/promotion/
-     -> future application
-        -> gitops/manifests/<application>/
+GitHub repository, main branch
+  -> homelab-apps Application
+     -> gitops/apps/kustomization.yaml
+        -> promotion Application
+           -> gitops/manifests/promotion/kustomization.yaml
+              -> ConfigMaps, Services and PVC
+              -> PostgreSQL StatefulSet
+              -> Keycloak Deployment
+              -> API and frontend Deployment
 ```
 
-The root Application manages child Application resources.
-Each child Application manages its own workloads.
+The root Application manages child Application resources. Each child
+Application manages the resources selected by its source configuration.
 
-One Application may represent a complete stack, including several
-Deployments, StatefulSets and Services.
+Adding a YAML file does not necessarily deploy it: register it in the
+appropriate `kustomization.yaml`.
 
-ApplicationSet is not required for this design.
+ApplicationSet is not required for this design; its controller is
+scaled to zero.
 
-## Ownership and permissions
+## Bootstrap and ownership
 
-The root Application has an administrative role because it manages
-other Applications. Changes to its configuration and to `apps/` require
-careful review.
+Argo CD is installed with Helm using versioned values.
+AppProjects, application namespaces and Secrets are provisioned
+explicitly during bootstrap.
 
-Workload Applications must use an explicitly configured AppProject.
-Allowed repositories, destinations and resource types must reflect
-their actual requirements.
+The root Application does not manage its own definition, the AppProjects,
+the Argo CD Helm release or the local-path provisioner.
 
-Applications should use dedicated namespaces. Namespace separation
-does not replace RBAC or network policies.
+| Project        | Destination | Allowed resources                           |
+| -------------- | ----------- | ------------------------------------------- |
+| `gitops-admin` | `argocd`    | Child Applications                          |
+| `workloads`    | `promotion` | Explicitly listed namespaced workload types |
 
-Platform components and application workloads have separate ownership.
+Neither project permits cluster-scoped resources. The promotion
+Namespace manifest is a bootstrap input, excluded from the workload
+Kustomize resource list.
+
+Managing Applications in `argocd` is an administrative capability.
+Changes to `apps/`, projects and bootstrap configuration require review
+by trusted maintainers.
+
 Do not manage the same resource through independent Helm releases,
 manual manifests and Argo CD Applications.
 
 ## Adding an application
 
-Once the root Application is configured:
+Run repository commands from the repository root.
 
-1. Create `manifests/<application>/`.
-2. Add the workload manifests and a `kustomization.yaml`.
-3. Check that the intended AppProject permits the deployment.
-4. Add `apps/<application>.yaml` with the repository, revision,
-   source path, destination and project. Register this file in
-   `apps/kustomization.yaml`.
-5. Render the manifests locally:
+1. Create `gitops/manifests/<application>/`.
+2. Add its manifests and `kustomization.yaml`.
+3. Provision its namespace and required Secrets separately.
+4. Explicitly authorize its namespace and required resource types in
+   the appropriate AppProject.
+5. Create `gitops/apps/<application>.yaml` with the repository, revision,
+   source path, project and destination.
+6. Register the Application in `gitops/apps/kustomization.yaml`.
+7. Render and validate:
 
    ```bash
    kubectl kustomize gitops/manifests/<application>/
+   kubectl apply --dry-run=server -k gitops/manifests/<application>/
+   kubectl apply --dry-run=server -k gitops/apps/
    ```
 
-6. Review the diff, stage the intended files, commit and push.
-7. Synchronize through Argo CD according to the configured sync policy.
-8. Verify Application status and test the deployed service.
+8. Review the changes, stage the intended files, commit and push.
+9. Check Argo CD status and test the deployed service.
 
-Rendering validates manifest assembly, not runtime behavior.
 Replace `<application>` with the actual directory name.
+Rendering and server dry-runs do not prove successful runtime behavior.
 
 ## Synchronization and deletion
 
-Sync policies must be explicit for each Application.
+Both current Applications enable automated sync and self-heal.
+Automatic pruning is disabled, and neither Application has a
+cascading-deletion finalizer.
 
-- Automated sync applies eligible Git changes without a manual sync.
-- Self-heal can reconcile tracked resources that drift from Git.
-- Pruning can delete tracked resources removed from Git.
-- Application deletion finalizers can trigger cascading deletion.
+Removing resources from Git therefore requires an explicit cleanup
+decision. Old generated ConfigMaps can remain when their content hash
+changes; remove them only after checking that they are no longer used.
 
-Do not enable deletion behavior without considering namespaces,
-PersistentVolumeClaims and application data.
+The PostgreSQL PVC has `Prune=false,Delete=false` Argo CD annotations.
+These do not protect it against direct deletion through Kubernetes.
 
-Git history is not a database backup. Storage retention is not a backup
-or a high-availability mechanism.
+Self-heal reconciles tracked configuration. It does not restore deleted
+database contents or replace access controls.
 
-## Secrets
+## Secrets and initialization
 
-Never commit plaintext Secret manifests, credentials, tokens or private
-password files. Base64 encoding does not encrypt a Kubernetes Secret.
+The following Secrets are provisioned outside GitOps:
 
-The existing `postgres-bootstrap` Secret is currently provisioned
-outside GitOps. Recreating the cluster requires provisioning it again
-before starting PostgreSQL.
+| Secret                     | Consumer   | Purpose                                    |
+| -------------------------- | ---------- | ------------------------------------------ |
+| `postgres-bootstrap`       | PostgreSQL | Initial database and role passwords        |
+| `keycloak-database`        | Keycloak   | Password for the Keycloak database role    |
+| `keycloak-bootstrap-admin` | Keycloak   | Initial administrator credentials          |
+| `promotion-database`       | API        | Password for the application database role |
 
-Encrypted or external secret management is not configured yet.
+Never commit plaintext Secret manifests, tokens or password files.
+Base64 encoding is not encryption. Local private files are excluded
+from Git but are not an encrypted secret store.
+
+Rebuilding the cluster requires provisioning these Secrets again.
+Encrypted or external secret management is not configured.
+
+PostgreSQL initialization scripts run only on an empty data directory.
+Changing their ConfigMaps does not migrate an existing database or
+rotate existing role passwords.
+
+Keycloak imports the realm when it is absent. Changing the import file
+does not reconcile an existing realm. Test users were created separately
+and are stored in PostgreSQL, not in Git.
+
+Bootstrap administrator credentials are for initial setup. Establishing
+a permanent administrator and removing the temporary bootstrap account
+remains a follow-up task.
+
+## Local access
+
+The current setup uses HTTP through localhost port-forwards.
+Keep each command running in its own WSL terminal:
+
+```bash
+kubectl -n promotion port-forward \
+  --address 127.0.0.1 service/keycloak 8080:8080
+```
+
+```bash
+kubectl -n promotion port-forward \
+  --address 127.0.0.1 service/promotion-api 8000:8000
+```
+
+Open the application at `http://localhost:8000`.
+The Keycloak administration console is at `http://localhost:8080/admin/`.
+
+Stop conflicting local Compose services if they occupy these ports.
+Each terminal running kubectl must use the intended kubeconfig.
+
+The browser-facing issuer is `http://localhost:8080/realms/homelab`.
+The API retrieves public signing keys through the internal
+`http://keycloak:8080` Service address.
+
+## Verification
+
+```bash
+kubectl -n argocd get applications
+kubectl -n promotion get deployments,statefulsets,pods,pvc,services
+
+curl --include http://localhost:8000/healthz
+curl --include http://localhost:8000/readyz
+curl --include http://localhost:8000/me
+```
+
+Expected unauthenticated HTTP results:
+
+| Endpoint   | Expected result                          |
+| ---------- | ---------------------------------------- |
+| `/healthz` | `200`, API responds                      |
+| `/readyz`  | `200`, database readiness check succeeds |
+| `/me`      | `401`, Bearer authentication required    |
+
+Use separate authenticated sessions to test developer creation,
+approver approval and rejection, and reader access. Verify the role
+displayed by the API after each account change.
 
 ## Images and security boundaries
 
-The promotion application image is built, tested, scanned, published
-to GHCR and signed by CI. Deployment configuration should reference
-the verified image digest.
+The application image was built, tested, scanned, published to GHCR,
+signed by CI and independently verified. Its Deployment uses the
+verified digest. PostgreSQL and Keycloak are also pinned by digest.
 
-The existing Kyverno signature policy is enforced in `signature-test`.
-It does not yet enforce signatures in the promotion namespace.
+The Kyverno signature policy currently applies only to `signature-test`.
+Signature enforcement in `promotion` is not configured yet.
 
 A valid signature identifies an accepted signer and image digest.
-It does not prove that the image has no vulnerabilities.
+It does not prove that an image has no vulnerabilities.
 
-See [container security](../docs/container-security.md) for the scan
-policy, documented exceptions and signature verification evidence.
+The API runs as UID 10001 with a read-only root filesystem, dropped
+capabilities and privilege escalation disabled.
 
-## Scope and limitations
+Keycloak runs as UID 1000 with dropped capabilities and privilege
+escalation disabled. Its filesystem remains writable because the
+official image performs startup augmentation. A preoptimized image
+is a future improvement.
 
-This repository keeps application code and deployment configuration
-together to make the homelab easier to reproduce.
+See [container security](../docs/container-security.md) for scan policy,
+risk exceptions and signature verification evidence.
 
-Argo CD currently runs without high availability.
-Local-path storage is node-local and does not replicate application data.
+## Limits and remaining work
 
-Bootstrap procedures, secret provisioning and recovery steps must
-remain documented alongside the deployment configuration.
+- HTTP port-forwards are the current access method; durable HTTPS
+  exposure is not configured.
+- PostgreSQL and Keycloak each run as a single instance.
+- Argo CD is not deployed in high-availability mode.
+- Local-path storage is node-local and does not replicate data.
+- PVC capacity requests are not guaranteed filesystem quotas.
+- Pod replacement persistence was tested; node-loss recovery and
+  backup restoration were not.
+- The manifests currently define no application-specific NetworkPolicy.
+- A complete fresh-cluster reproduction remains to be validated.
+- Secret provisioning and recovery need a consolidated runbook.
 
-## Bootstrap ownership
-
-Argo CD installation, AppProjects and application namespaces are
-provisioned explicitly during bootstrap.
-
-The root Application watches only `gitops/apps/`. It does not manage
-the AppProjects, its own definition or the Argo CD Helm release.
-
-The `gitops-admin` project permits Application resources in `argocd`.
-This remains an administrative capability: changes to child Application
-definitions must be reviewed by trusted maintainers.
-
-The `workloads` project currently permits selected namespaced resource
-types in `promotion`. Additional application namespaces must be
-explicitly authorized before deployment.
-
-Cluster-scoped resources are not permitted by either project.
-The promotion Namespace manifest is a bootstrap input and must not be
-included in the workload Kustomize resource list.
-
-Plaintext Secrets are provisioned separately and are not permitted as
-managed resources by the current workloads project.
-
-## Initial root sync policy
-
-The root Application enables automated synchronization and self-heal.
-Automatic pruning is disabled, and no cascading-deletion finalizer is
-configured on the root Application.
-
-Removing a child Application from Git will therefore require an
-explicit cleanup decision. Each child Application defines its own
-workload synchronization and deletion policy.
-
-Publish the configuration to Git before applying the root Application,
-because Argo CD reads the remote repository rather than local files.
+Git history and volume retention are not database backups.
