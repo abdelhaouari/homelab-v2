@@ -120,8 +120,15 @@ Two ImageValidatingPolicy resources enforce image admission in `promotion`:
 | `verify-promotion-workloads` | Pods and automatically generated controller rules |
 | `verify-promotion-workloads-ephemeral` | Updates through `pods/ephemeralcontainers` |
 
-The policies are applied explicitly from `kubernetes/kyverno/`.
-They are not managed by the workloads Argo CD Application.
+The policies are defined in `gitops/manifests/kyverno-policies/`.
+The `kyverno-policies` Argo CD Application manages them through the
+`platform-security` AppProject, which permits only cluster-scoped
+`ImageValidatingPolicy` resources. The root `homelab-apps` Application
+manages this child Application.
+
+The Kyverno controllers remain installed separately with Helm using
+`kubernetes/kyverno/values.yaml`. The `platform-security` AppProject
+must be bootstrapped before the child Application is synchronized.
 
 ### Trust rules
 

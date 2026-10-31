@@ -241,8 +241,23 @@ Separate policies cover Pods and generated controller rules, and the
 `pods/ephemeralcontainers` subresource. The original policy remains in
 `signature-test`.
 
-These platform policies are applied explicitly from `kubernetes/kyverno/`;
-they are not managed by the workloads Argo CD Application.
+The `kyverno-policies` Application manages these platform policies from
+`gitops/manifests/kyverno-policies/` through the `platform-security`
+AppProject. The root `homelab-apps` Application manages both child
+Applications: `promotion` and `kyverno-policies`.
+
+The policies use automated synchronization with self-healing enabled
+and pruning disabled. Removing a policy from Git does not automatically
+delete it from the cluster.
+
+Bootstrap the security project before synchronizing its Application:
+
+```bash
+kubectl apply -f gitops/projects/platform-security.yaml
+```
+
+The Kyverno controllers remain installed separately with Helm using
+`kubernetes/kyverno/values.yaml`.
 
 A valid signature identifies an accepted signer and image digest.
 It does not prove that an image has no vulnerabilities.

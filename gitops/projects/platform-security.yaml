@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-security
+  namespace: argocd
+spec:
+  description: Manage cluster-wide image admission policies.
+  sourceRepos:
+    - https://github.com/abdelhaouari/homelab-v2.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: kyverno
+  clusterResourceWhitelist:
+    - group: policies.kyverno.io
+      kind: ImageValidatingPolicy
+  namespaceResourceBlacklist:
+    - group: "*"
+      kind: "*"
