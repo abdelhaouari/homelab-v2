@@ -6,3 +6,4 @@ resources:
   - kyverno-policies.yaml
   - network-infrastructure.yaml
   - shared-gateway.yaml
+  - certificate-infrastructure.yaml
