@@ -1,7 +1,7 @@
 # Helm chart: argo/argo-cd 10.11.6
 # Application: Argo CD v3.5.6
 # Single-replica homelab installation.
-# Initial access uses a localhost port-forward with server TLS enabled.
+# TLS terminates at the shared Gateway; backend traffic uses HTTP.
 
 controller:
   replicas: 1
@@ -32,5 +32,7 @@ notifications:
   enabled: false
 
 configs:
+  cm:
+    url: https://argocd.lab.ahaouari.com
   params:
-    server.insecure: false
+    server.insecure: true

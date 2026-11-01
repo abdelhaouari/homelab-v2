@@ -7,3 +7,4 @@ resources:
   - network-infrastructure.yaml
   - shared-gateway.yaml
   - certificate-infrastructure.yaml
+  - argocd-routing.yaml

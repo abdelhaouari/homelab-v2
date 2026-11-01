@@ -97,7 +97,13 @@ The DNS solver selects ahaouari.com and its subdomains. This selection
 does not restrict which Kubernetes users may request certificates.
 
 Staging certificates are for testing and are not trusted by browsers.
-No production issuer or HTTPS listener is introduced by this bootstrap.
+
+The letsencrypt-prod ClusterIssuer uses the production ACME endpoint and
+a separate account-key Secret. The argocd Certificate requests a production
+certificate for argocd.lab.ahaouari.com, stored as argocd-tls in ingress-system.
+
+The staging certificate remains separate as argocd-staging-tls.
+The Gateway HTTPS listener references argocd-tls. The staging certificate is not attached to the Gateway.
 
 ## Validation and limits
 
@@ -111,5 +117,11 @@ Validated before introducing the issuer:
 A Ready ClusterIssuer does not prove that Cloudflare DNS permissions work.
 An actual staging certificate request is required to validate DNS-01 issuance.
 
-Certificate issuance, renewal, and browser HTTPS access remain to be tested.
+The argocd-staging Certificate reached Ready=True after approximately
+two minutes. This validated Cloudflare DNS-01 presentation and staging
+issuance without changing DNS resolver settings.
+
+Production issuance, automatic renewal, and browser HTTPS access remain
+to be tested.
+
 The chart is version-pinned; container images currently use version tags.
