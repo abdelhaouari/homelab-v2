@@ -114,8 +114,8 @@ Validated before introducing the issuer:
 - The webhook rejected a Certificate whose renewBefore exceeded duration.
 - GitOps schema validation and validator rejection tests passed.
 
-A Ready ClusterIssuer does not prove that Cloudflare DNS permissions work.
-An actual staging certificate request is required to validate DNS-01 issuance.
+A Ready ClusterIssuer alone does not prove that Cloudflare DNS permissions
+work. The subsequent staging request provided that validation:
 
 The argocd-staging Certificate reached Ready=True after approximately
 two minutes. This validated Cloudflare DNS-01 presentation and staging
@@ -125,6 +125,7 @@ Production issuance was validated: the argocd Certificate reached
 Ready=True and generated the argocd-tls Secret.
 
 Access from the Windows workstation was verified:
+
 - Local DNS resolved argocd.lab.ahaouari.com to 10.10.20.103.
 - HTTP returned a 301 redirect to HTTPS.
 - HTTPS returned 200 without disabling certificate verification.
@@ -132,5 +133,10 @@ Access from the Windows workstation was verified:
   Synced and Healthy.
 
 Automatic renewal is configured but has not yet been observed.
+
+The October 31, 2026 read-only review confirmed that both ClusterIssuers
+and both Certificates remained ready. The
+[Gateway guide](../../gitops/manifests/shared-gateway/README.md) describes
+which certificate is attached to the HTTPS listener.
 
 The chart is version-pinned; container images currently use version tags.

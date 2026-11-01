@@ -1,6 +1,8 @@
 # Argo CD LAN access
 
-URL: https://argocd.lab.ahaouari.com
+LAN URL: https://argocd.lab.ahaouari.com
+
+Validated on October 31, 2026.
 
 The local DNS record points to 10.10.20.103. The shared Cilium Gateway
 terminates TLS using the production certificate in ingress-system.
@@ -17,7 +19,9 @@ Helm manages the Argo CD server configuration.
 
 Before synchronizing this Application, bootstrap its project:
 
-    kubectl apply -f gitops/projects/platform-argocd-routing.yaml
+```bash
+kubectl apply -f gitops/projects/platform-argocd-routing.yaml
+```
 
 Apply the versioned Argo CD Helm values using chart 10.11.6.
 The values set server.insecure=true and configure the external URL.
@@ -47,3 +51,8 @@ unencrypted HTTP inside the cluster.
 
 Automatic certificate renewal and Gateway failover have not yet been
 validated. This result does not demonstrate public Internet accessibility.
+
+The promotion application and Keycloak are not exposed by these routes.
+See the [shared Gateway](../shared-gateway/README.md) for listener and
+certificate ownership, and the [GitOps guide](../../README.md) for the
+complete Application hierarchy.

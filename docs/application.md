@@ -36,6 +36,10 @@ Automated validation completed in separate runs:
 | API authentication    |      8 | Access token validation through HTTP                           |
 | HTTP routes           |      9 | Authorization and input validation with mocked database access |
 
+The six service-independent suites used by CI were rerun on October 31,
+2026: all 38 tests passed. Repository, concurrent-transaction, and SQL
+checks in the table refer to earlier database-backed runs.
+
 Manual end-to-end validation:
 
 - A developer authenticated through Keycloak, submitted a request,
@@ -50,11 +54,21 @@ Manual end-to-end validation:
 - A disposable Keycloak instance imported the versioned realm and
   served its OIDC discovery document.
 
-The API and compiled frontend run together in a local Docker Compose
-container. PostgreSQL and Keycloak run as separate services.
-Direct execution in WSL remains available for development.
-CI/CD, image signing, and application deployment to Kubernetes
-remain planned.
+The API and compiled frontend are deployed to Kubernetes alongside
+Keycloak and PostgreSQL, managed through Argo CD. On October 31, 2026,
+the two Deployments and PostgreSQL StatefulSet were each ready at one
+replica. The browser workflow, including creation, approval, rejection,
+and reader inspection, was exercised in the cluster as recorded in the
+[GitOps guide](../gitops/README.md).
+
+GitHub Actions runs automated tests and security checks, builds and scans
+the application image, and publishes and signs it on pushes to `main`.
+Kyverno verifies application image signatures at admission in `promotion`.
+See [secure delivery](delivery.md) and [container security](container-security.md).
+
+Docker Compose and direct WSL execution remain local development paths.
+The environment-specific instructions below describe those paths;
+Kubernetes access and Secret names are documented in the GitOps guide.
 
 The API records promotion decisions. It does not deploy images or
 verify their existence, signatures, provenance, or scan results.
@@ -67,13 +81,14 @@ delivery on the homelab Kubernetes platform.
 The API records requests to promote a container image to a target
 environment. It records approval decisions but does not deploy images.
 
-## Initial scope
+## Implemented scope
 
 - Python API.
 - PostgreSQL persistence.
 - Automated tests for business rules and authorization.
 - Container image deployed to the existing Kubernetes cluster.
-- CI security checks introduced progressively.
+- CI tests, security gates, GHCR publication, and keyless image signing.
+- Argo CD deployment and Kyverno image admission.
 
 The initial implementation supports one project and one target
 environment, staging. Multi-project authorization is outside this first
@@ -270,9 +285,12 @@ The frontend build completed successfully. Browser checks were manual;
 there is no automated browser test suite. Error messages are implemented,
 but browser coverage of all error paths and pagination is not yet proven.
 
-The promotion-web client was configured in the running realm and added
-to the versioned JSON. The previous fresh-realm import test predates
-this client addition; the updated import has not been retested.
+The promotion-web client was configured in the local running realm and
+added to the versioned JSON. The local disposable-realm import test
+predates that addition. The later Kubernetes deployment mounts the
+versioned realm as a generated ConfigMap, and its browser login and
+role-based workflow were validated. A complete fresh-cluster reproduction
+has not yet been performed.
 
 ## Local container execution
 
@@ -331,12 +349,41 @@ available. Compose waits for PostgreSQL health, but Keycloak being started
 does not guarantee authentication readiness.
 
 Base image tags and transitive Python dependencies are not fully locked
-by digest or hashes. Image scanning, signing, and registry publication
-remain delivery milestones.
+by digest or hashes. The CI-built application image is now scanned,
+published to GHCR, and signed by digest. The Kubernetes Deployment pins
+the selected published digest; Compose continues to build a local image.
+
+## Kubernetes execution
+
+Argo CD deploys the application manifests from
+[`gitops/manifests/promotion/`](../gitops/manifests/promotion/).
+The API/frontend and Keycloak use single-replica Deployments; PostgreSQL
+uses a StatefulSet with a retained, node-local PVC.
+
+Keycloak uses `start` with PostgreSQL in Kubernetes, whereas local Compose
+uses `start-dev` and a development file database. Kubernetes still uses
+the localhost HTTP hostname and OIDC issuer for port-forward access.
+The frontend also targets Keycloak at `http://localhost:8080`.
+Argo CD's LAN HTTPS setup does not expose this application or Keycloak.
+
+The API image uses UID/GID 10001, a read-only root filesystem, no added
+capabilities, disabled privilege escalation, `RuntimeDefault` seccomp,
+and no automatic ServiceAccount token mount. Startup and liveness probes
+use `/healthz`; readiness uses `/readyz`. Database credentials come from
+the separately provisioned `promotion-database` Secret.
+
+The recorded Kubernetes browser checks include writes that had not been
+repeated in the earlier local Compose validation: developer creation,
+approval, rejection, and reader inspection. PostgreSQL Pod replacement
+preserved records using the same PVC. This does not establish node-loss
+recovery or backup restoration.
+
+See [GitOps operations](../gitops/README.md) for localhost port-forwards,
+initialization, and Secret provisioning boundaries.
 
 ## Delivery milestones
 
-Completed locally:
+Completed:
 
 1. Domain rules and PostgreSQL persistence.
 2. Concurrency protection and database permission checks.
@@ -345,12 +392,17 @@ Completed locally:
 5. Fresh realm import validation.
 6. Browser frontend and manual role-based workflow validation.
 7. Container image build and local execution of the API and compiled frontend.
+8. CI tests, secret scanning, SAST, dependency auditing, and image scanning.
+9. GHCR publication, keyless Cosign signing, and signature verification.
+10. Kubernetes deployment through Argo CD with digest-pinned images.
+11. Namespace image admission, including init and ephemeral containers.
+12. Kubernetes browser workflow and PostgreSQL Pod-replacement persistence checks.
 
 Next:
 
-1. Automate tests and security checks in CI.
-2. Publish the image and introduce signing and verification.
-3. Deploy the application to Kubernetes.
+1. Extend LAN HTTPS to the API/frontend and Keycloak.
+2. Add database, identity-provider, and browser integration checks to CI.
+3. Validate workload isolation, secret rotation, and backup restoration.
 
 Automated tests use controlled identities and mocked dependencies where
 appropriate. These test mechanisms do not provide an authentication
@@ -358,9 +410,10 @@ bypass in the running application.
 
 ## Later extensions
 
-- Record and verify build provenance, signatures, and SBOM references.
+- Record and verify build provenance, scan evidence, and SBOM references
+  associated with promotion requests.
 - Use pipeline identities to submit promotion requests.
-- Introduce GitOps deployment after approval.
+- Connect recorded approvals to reviewed GitOps release updates.
 - Validate workload isolation, secret rotation, and recovery.
 
 These extensions are planned and are not implemented capabilities.

@@ -1,7 +1,8 @@
-# GitOps application deployments
+# GitOps workloads and platform services
 
-Argo CD manages the promotion application stack from this directory
-using the app-of-apps pattern.
+Argo CD manages the promotion application stack, image admission policies,
+LAN address allocation, shared Gateway, certificate issuers, and Argo CD
+routes from this directory using the app-of-apps pattern.
 
 Application source code lives in `../app/`. Cluster bootstrap resources
 and platform tests also exist in `../kubernetes/`; they are not
@@ -9,10 +10,13 @@ automatically managed by Argo CD.
 
 ## Validated state
 
-- Argo CD Applications `homelab-apps` and `promotion` reached
-  `Synced` and `Healthy`.
+- All seven Argo CD Applications were `Synced` and `Healthy` during
+  the October 31, 2026 read-only review.
 - PostgreSQL, Keycloak and the promotion API are running in Kubernetes.
 - The API serves the compiled frontend.
+
+Earlier functional validations recorded in this repository include:
+
 - Browser authentication through Keycloak works.
 - A developer created promotion requests.
 - An approver approved one request and rejected another.
@@ -20,6 +24,10 @@ automatically managed by Argo CD.
 - PostgreSQL data survived replacement of its Pod using the same PVC.
 - The application database role authenticated over TCP and read its table.
 - The Keycloak database role authenticated over TCP.
+- Image admission allowed the signed application and approved vendor
+  digests, and denied unauthorized images, including init/ephemeral containers.
+- Argo CD LAN HTTPS, HTTP redirection, and browser login worked through
+  the shared Gateway with a production certificate.
 
 These observations validate the tested paths. They do not demonstrate
 high availability, node-loss recovery or a complete fresh-cluster rebuild.
@@ -34,23 +42,24 @@ not deploy an image or verify its signature.
 gitops/
 ├── README.md
 ├── bootstrap/
+│   ├── ingress-namespace.yaml
 │   ├── root-application.yaml
 │   └── argocd/
 │       └── values.yaml
 ├── projects/
 │   ├── gitops-admin.yaml
+│   ├── platform-*.yaml
 │   └── workloads.yaml
 ├── apps/
 │   ├── kustomization.yaml
-│   └── promotion.yaml
+│   └── *.yaml                 # Six child Applications
 └── manifests/
-    └── promotion/
-        ├── kustomization.yaml
-        ├── namespace.yaml
-        ├── init-postgres.sh
-        ├── postgres.yaml
-        ├── keycloak.yaml
-        └── application.yaml
+    ├── promotion/
+    ├── kyverno-policies/
+    ├── network-infrastructure/
+    ├── shared-gateway/
+    ├── certificate-infrastructure/
+    └── argocd-routing/
 ```
 
 Kustomize also uses `app/sql/` and `app/keycloak/` from the repository
@@ -63,12 +72,12 @@ configuration. These source files are not duplicated.
 GitHub repository, main branch
   -> homelab-apps Application
      -> gitops/apps/kustomization.yaml
-        -> promotion Application
-           -> gitops/manifests/promotion/kustomization.yaml
-              -> ConfigMaps, Services and PVC
-              -> PostgreSQL StatefulSet
-              -> Keycloak Deployment
-              -> API and frontend Deployment
+        -> promotion                  -> API/frontend, Keycloak, PostgreSQL
+        -> kyverno-policies           -> ImageValidatingPolicy resources
+        -> network-infrastructure     -> Cilium IP pool and L2 policy
+        -> shared-gateway             -> Gateway and Certificates
+        -> certificate-infrastructure -> Staging/production ClusterIssuers
+        -> argocd-routing             -> HTTPS route and HTTP redirect
 ```
 
 The root Application manages child Application resources. Each child
@@ -87,16 +96,37 @@ AppProjects, application namespaces and Secrets are provisioned
 explicitly during bootstrap.
 
 The root Application does not manage its own definition, the AppProjects,
-the Argo CD Helm release or the local-path provisioner.
+the controller Helm releases, the Gateway API CRDs, the local-path
+provisioner, namespaces, or bootstrap Secrets.
 
 | Project        | Destination | Allowed resources                           |
 | -------------- | ----------- | ------------------------------------------- |
 | `gitops-admin` | `argocd`    | Child Applications                          |
 | `workloads`    | `promotion` | Explicitly listed namespaced workload types |
+| `platform-security` | `kyverno` | Cluster-scoped ImageValidatingPolicy only |
+| `platform-network` | `kube-system` | Cluster-scoped CiliumLoadBalancerIPPool and CiliumL2AnnouncementPolicy only |
+| `platform-gateway` | `ingress-system` | Gateway, HTTPRoute, and Certificate |
+| `platform-certificates` | `cert-manager` | Cluster-scoped ClusterIssuer only |
+| `platform-argocd-routing` | `argocd` | HTTPRoute only |
 
-Neither project permits cluster-scoped resources. The promotion
-Namespace manifest is a bootstrap input, excluded from the workload
-Kustomize resource list.
+Each project restricts the source repository, destinations, and resource
+types. The three projects managing cluster-scoped resources deny all
+namespaced types. The promotion Namespace manifest is a bootstrap input,
+excluded from the workload Kustomize resource list.
+
+Bootstrap dependencies must exist before their child Applications sync:
+
+1. Install the platform controllers and Gateway API CRDs separately.
+   Gateway API CRDs precede Cilium with Gateway API enabled.
+2. Prepare local-path storage, application/ingress namespaces, and Secrets.
+3. Apply the required AppProjects from `gitops/projects/`.
+4. Apply the root Application from `gitops/bootstrap/root-application.yaml`.
+5. Check child synchronization. Address allocation and certificate issuance
+   must be ready for the Gateway and HTTPS routes to become usable.
+
+This is dependency ordering; the repository does not contain one command
+that reproduces the full platform and recovers its data. Controller and
+service ownership is described in [architecture](../docs/architecture.md).
 
 Managing Applications in `argocd` is an administrative capability.
 Changes to `apps/`, projects and bootstrap configuration require review
@@ -117,10 +147,13 @@ Run repository commands from the repository root.
 5. Create `gitops/apps/<application>.yaml` with the repository, revision,
    source path, project and destination.
 6. Register the Application in `gitops/apps/kustomization.yaml`.
-7. Render and validate:
+7. Render, validate with the repository's pinned-schema tooling, and
+   check cluster admission:
 
    ```bash
    kubectl kustomize gitops/manifests/<application>/
+   bash ci/scripts/validate-gitops.sh
+   python3 ci/scripts/test-gitops-validator.py
    kubectl apply --dry-run=server -k gitops/manifests/<application>/
    kubectl apply --dry-run=server -k gitops/apps/
    ```
@@ -129,13 +162,14 @@ Run repository commands from the repository root.
 9. Check Argo CD status and test the deployed service.
 
 Replace `<application>` with the actual directory name.
+The local validation commands require kubectl and kubeconform as described
+in [secure delivery](../docs/delivery.md).
 Rendering and server dry-runs do not prove successful runtime behavior.
 
 ## Synchronization and deletion
 
-Both current Applications enable automated sync and self-heal.
-Automatic pruning is disabled, and neither Application has a
-cascading-deletion finalizer.
+All seven Applications enable automated sync and self-heal.
+Automatic pruning is disabled, and none has a cascading-deletion finalizer.
 
 Removing resources from Git therefore requires an explicit cleanup
 decision. Old generated ConfigMaps can remain when their content hash
@@ -165,6 +199,11 @@ from Git but are not an encrypted secret store.
 Rebuilding the cluster requires provisioning these Secrets again.
 Encrypted or external secret management is not configured.
 
+The certificate platform also requires `cloudflare-api-token-secret` in
+`cert-manager`. Its provisioning is documented in the
+[cert-manager guide](../kubernetes/cert-manager/README.md). ACME account
+keys and certificate Secrets are generated by cert-manager.
+
 PostgreSQL initialization scripts run only on an empty data directory.
 Changing their ConfigMaps does not migrate an existing database or
 rotate existing role passwords.
@@ -177,9 +216,16 @@ Bootstrap administrator credentials are for initial setup. Establishing
 a permanent administrator and removing the temporary bootstrap account
 remains a follow-up task.
 
-## Local access
+## Application access
 
-The current setup uses HTTP through localhost port-forwards.
+The promotion application and Keycloak use HTTP through localhost
+port-forwards. Argo CD uses [LAN HTTPS](manifests/argocd-routing/README.md).
+From the repository root, select the lab kubeconfig:
+
+```bash
+export KUBECONFIG="$PWD/private/homelab-v2.kubeconfig"
+```
+
 Keep each command running in its own WSL terminal:
 
 ```bash
@@ -243,8 +289,8 @@ Separate policies cover Pods and generated controller rules, and the
 
 The `kyverno-policies` Application manages these platform policies from
 `gitops/manifests/kyverno-policies/` through the `platform-security`
-AppProject. The root `homelab-apps` Application manages both child
-Applications: `promotion` and `kyverno-policies`.
+AppProject. The root `homelab-apps` Application manages this child
+alongside the five other workload and platform Applications.
 
 The policies use automated synchronization with self-healing enabled
 and pruning disabled. Removing a policy from Git does not automatically
@@ -275,8 +321,8 @@ risk exceptions and signature verification evidence.
 
 ## Limits and remaining work
 
-- HTTP port-forwards are the current access method; durable HTTPS
-  exposure is not configured.
+- The promotion application and Keycloak still use localhost HTTP
+  port-forwards. Argo CD LAN HTTPS is configured and validated.
 - PostgreSQL and Keycloak each run as a single instance.
 - Argo CD is not deployed in high-availability mode.
 - Local-path storage is node-local and does not replicate data.
