@@ -31,5 +31,19 @@ The route backend is in the same namespace, so no ReferenceGrant is needed.
 This configuration provides LAN access to the UI. It does not configure
 public Internet exposure or native gRPC CLI routing.
 
-Production certificate issuance and browser access must be verified after
-deployment. A successful manifest validation is not runtime proof.
+## Verified behavior
+
+- The production argocd Certificate reached Ready=True.
+- Gateway listeners reported Accepted, ResolvedRefs, and Programmed.
+- The HTTPS route reported Accepted and ResolvedRefs.
+- Local DNS on the Windows workstation resolved the hostname to 10.10.20.103.
+- HTTP returned a 301 redirect to HTTPS.
+- HTTPS returned 200 without bypassing certificate verification.
+- Browser login succeeded without a port-forward.
+- All seven Argo CD Applications were Synced and Healthy.
+
+TLS terminates at the Gateway. Gateway-to-Argo-CD traffic remains
+unencrypted HTTP inside the cluster.
+
+Automatic certificate renewal and Gateway failover have not yet been
+validated. This result does not demonstrate public Internet accessibility.
