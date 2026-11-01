@@ -22,8 +22,9 @@ Custom schemas were converted from the installed CRDs:
 Conversion used scripts/openapi2jsonschema.py from yannh/kubeconform
 tag v0.8.0, with FILENAME_FORMAT={fullgroup}-{kind}_{version}.
 
-Only schemas required by the current validation scope and the planned
-HTTPRoute resources are included.
+Only schemas required by the current validation scope are included,
+including the Gateway, HTTPRoute, Certificate, and ClusterIssuer
+resources now managed through GitOps.
 
 SHA256SUMS records the committed JSON file contents. It detects accidental
 changes but is not an independent authenticity or security guarantee.

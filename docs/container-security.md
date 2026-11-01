@@ -11,7 +11,9 @@ or images referenced by promotion requests.
 Assessment date: 2026-10-26.
 Exception review deadline: 2026-11-09.
 Owner: repository maintainer.
-Deployment scope: local homelab only.
+Deployment scope: personal homelab, including the Kubernetes `promotion`
+namespace. The scan counts below remain the October 26 assessment;
+they are not a new scan of the currently deployed image.
 
 ## Observed results
 
@@ -40,7 +42,11 @@ The Trixie candidate passed:
 - All Docker capabilities dropped.
 
 These restrictions are mandatory for exceptions based on reduced privilege.
-Equivalent controls must be validated before any Kubernetes deployment.
+The Kubernetes application manifest now declares equivalent non-root,
+read-only filesystem, dropped-capability, and no-privilege-escalation
+settings, plus RuntimeDefault seccomp and disabled ServiceAccount token
+automounting. The October 31 review confirmed workload readiness; it did
+not repeat the process-level checks inside the Kubernetes container.
 The image alone does not enforce all these restrictions.
 
 ## Temporary exceptions
@@ -82,7 +88,9 @@ https://security-tracker.debian.org/tracker/CVE-2026-54369
   restrictions change.
 - Apply available fixes and remove obsolete exceptions.
 - Do not automatically extend exception deadlines.
-- Reassess all exceptions before Kubernetes deployment.
+- Reassess all exceptions when moving deployment environments. The
+  original assessment predates Kubernetes deployment; a separate
+  completed reassessment is not recorded here.
 
 A passing gate means that no unexcepted HIGH or CRITICAL findings remain.
 It does not mean that the image has no vulnerabilities.
@@ -96,7 +104,9 @@ Validated on 2026-10-26 with:
 - Cosign v3.1.4 signing in GitHub Actions.
 - Public image and signature storage in GHCR.
 
-The ImageValidatingPolicy is restricted to the signature-test namespace.
+The initial `verify-promotion-image` policy remains restricted to the
+`signature-test` namespace. The later policies for the deployed application
+are described below.
 
 Server-side dry-run results:
 
@@ -203,3 +213,16 @@ modify the policies.
 
 Keep both policies' trust rules synchronized when changing the allowlist
 or accepted signing identity.
+
+## Delivery integration
+
+The GitHub Actions application job now runs the Trivy gate, publishes to
+GHCR, and signs and verifies the published digest on pushes to `main`.
+Argo CD selects the digest from the application Deployment manifest.
+The [delivery guide](delivery.md) describes the complete flow, independent
+CI jobs, and checks that remain outside CI.
+
+On October 31, 2026, all three ImageValidatingPolicy resources reported
+ready, and the policy Application was Synced and Healthy. This read-only
+status check does not rerun the recorded admission tests or rescan images.
+The November 9 exception deadline remains unchanged.

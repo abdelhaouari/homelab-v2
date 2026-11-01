@@ -57,5 +57,11 @@ authorization boundary.
 Use externalTrafficPolicy: Cluster for the Gateway LoadBalancer Service.
 Cilium L2 announcements do not support externalTrafficPolicy: Local.
 
-LAN reachability and announcement failover must be tested after the Gateway
-is deployed. A complete fresh-cluster rebuild remains unvalidated.
+LAN reachability was validated through the deployed shared Gateway:
+the Argo CD hostname resolved to `10.10.20.103` on the Windows workstation,
+HTTP redirected to HTTPS, and verified HTTPS and browser login succeeded.
+See [Argo CD routing](../argocd-routing/README.md).
+
+Announcement failover and a complete fresh-cluster rebuild remain
+unvalidated. Successful access through the current elected worker does
+not establish failover behavior.

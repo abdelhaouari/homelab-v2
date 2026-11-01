@@ -10,12 +10,19 @@ running on Proxmox VE. Terraform provisions the VMs, cloud-init establishes
 guest access and addressing, and Ansible configures the hosts and
 Kubernetes packages.
 
-All four nodes have reported Ready. Cilium and CoreDNS are operational.
-A functional smoke test verified internal DNS, direct cross-node pod
-communication, and HTTP access through a Kubernetes Service.
+All four nodes reported Ready during the October 31, 2026 review. Cilium
+provides Service handling without kube-proxy, and a functional smoke test
+previously verified DNS, cross-node pod communication, and Service access.
 
-Application delivery pipelines and workload security controls are the next
-phase. They are not yet implemented.
+The platform now runs the promotion API and compiled frontend, Keycloak,
+and PostgreSQL under Argo CD. GitHub Actions tests, scans, publishes, and
+signs the application image; Kyverno enforces image trust in `promotion`.
+A shared Cilium Gateway exposes Argo CD over LAN HTTPS with a certificate
+issued through cert-manager and Cloudflare DNS-01.
+
+All seven Argo CD Applications were Synced and Healthy. See the
+[validation record](validation.md) for the observed state and the scope
+of earlier functional tests.
 
 ## Physical infrastructure
 
@@ -188,6 +195,95 @@ requires controls at the Kubernetes or host boundary as appropriate.
 Both CoreDNS replicas were observed on the same worker during initial
 validation. DNS availability after losing that worker has not been tested.
 
+## LAN access and certificate management
+
+The shared Gateway requests `10.10.20.103`, outside the VLAN 20 DHCP pool.
+Cilium LB IPAM assigns the address to its generated LoadBalancer Service;
+the L2 announcement policy selects worker nodes on `eth0` to announce it.
+The pool and policy select the label
+`networking.ahaouari.com/exposure: lan-gateway`.
+
+```mermaid
+flowchart LR
+    Workstation[LAN workstation<br/>Local DNS] --> Gateway[10.10.20.103<br/>Cilium Gateway]
+    Gateway -->|HTTP 301| HTTPS[HTTPS listener<br/>argocd.lab.ahaouari.com]
+    HTTPS -->|TLS termination then HTTP| Argo[argocd-server:80]
+    CertManager[cert-manager] -->|Certificate Secret| HTTPS
+    CertManager -->|ACME DNS-01| ACME[Let's Encrypt / Cloudflare]
+```
+
+The Gateway lives in `ingress-system`. Its HTTP and hostname-specific
+HTTPS listeners accept HTTPRoutes from `argocd` through an explicit
+namespace selector. The HTTPS route forwards to `argocd-server:80`;
+the HTTP route redirects the hostname to HTTPS with status 301.
+
+cert-manager manages separate staging and production ClusterIssuers.
+The production `argocd` Certificate writes `argocd-tls`, used by the
+Gateway. `argocd-staging-tls` remains a separate test certificate.
+The Cloudflare API token is provisioned outside Git.
+
+The Argo CD Helm values configure its external URL and
+`server.insecure=true` for HTTP behind the terminating Gateway.
+Authentication remains enabled. Gateway-to-Argo-CD traffic is HTTP.
+Local DNS is configured outside this repository; this setup provides
+LAN access, with no configured public Internet exposure.
+
+The promotion application and Keycloak still use localhost port-forwards.
+Their issuer, frontend URL, and allowed redirects must change together
+before extending the Gateway to them. Renewal and Gateway failover remain
+unvalidated. See the [Gateway guide](../gitops/manifests/shared-gateway/README.md).
+
+## Workloads, identity, and storage
+
+The `promotion` namespace contains one API/frontend Deployment, one
+Keycloak Deployment, and a single-instance PostgreSQL StatefulSet.
+The API uses OIDC bearer tokens and application roles from Keycloak;
+Keycloak stores identity data in its own PostgreSQL database and role.
+The API connects through a separate restricted `promotion_app` role.
+
+The API and PostgreSQL run as non-root users with read-only root
+filesystems. All three workloads drop capabilities, disable privilege
+escalation and ServiceAccount token automounting, and use
+`RuntimeDefault` seccomp. Keycloak's root filesystem remains writable
+for startup augmentation. Resource requests, limits, and startup,
+readiness, and liveness probes are versioned with each workload.
+
+The local-path provisioner uses node-local storage, `WaitForFirstConsumer`,
+and a `Retain` reclaim policy. PostgreSQL uses a 5 GiB PVC, additionally
+marked `Prune=false,Delete=false` for Argo CD. Pod-replacement persistence
+was tested. Neither retention setting replicates data or protects against
+direct deletion, node/storage loss, or missing backups.
+
+Database initialization runs only on an empty data directory. Keycloak's
+realm import initializes a missing realm. These mechanisms do not migrate
+an existing database, reconcile realm changes, or rotate credentials.
+See [application design](application.md) and [GitOps operations](../gitops/README.md).
+
+## Delivery and policy enforcement
+
+GitHub Actions performs secret scanning, SAST, dependency audits,
+application tests, container checks, and an image vulnerability gate.
+On pushes to `main`, the application job publishes to GHCR and uses
+Cosign to sign and verify the published digest with its OIDC identity.
+Strict GitOps schema validation runs as a separate job.
+
+Argo CD reconciles six child Applications from `main`, under the
+`homelab-apps` root. AppProjects allow explicit resource types and
+destinations for workloads, policies, address allocation, certificates,
+the Gateway, and Argo CD routes. Automated sync and self-healing are
+enabled; pruning is disabled throughout.
+
+Kyverno checks application images against the exact CI signing identity
+and accepts PostgreSQL and Keycloak only at explicitly allowed digests.
+Separate policies cover ordinary/init containers and ephemeral-container
+updates. They fail closed at admission; background evaluation is disabled.
+The vendor-image allowlist does not verify vendor signatures.
+
+Release selection is an explicit digest change in Git. The application's
+human promotion decisions are not connected to deployment automation.
+See [secure delivery](delivery.md) for job ordering and trust boundaries,
+and [container security](container-security.md) for admission evidence.
+
 ## Automation boundaries
 
 | Tool | Responsibility |
@@ -196,8 +292,12 @@ validation. DNS availability after losing that worker has not been tested.
 | cloud-init | Initial guest user, SSH key, and network configuration |
 | Ansible | Host preparation, cluster bootstrap checks, worker joining, local access, and Cilium orchestration |
 | kubeadm | Control-plane initialization and node joining |
-| Helm | Cilium release management, invoked through Ansible |
-| kubectl | Readiness checks and functional tests |
+| Helm | Cilium through Ansible; Argo CD, Kyverno, and cert-manager installed separately with versioned values |
+| GitHub Actions | Source/dependency/image checks, application build, publication and signing, GitOps schema validation |
+| Argo CD / Kustomize | Reconciliation of the application stack and selected platform resources |
+| Kyverno | Image admission policies for `promotion` and the `signature-test` namespace |
+| cert-manager | ACME account handling, DNS-01 challenges, certificate issuance and configured renewal |
+| kubectl | Explicit bootstrap resources, readiness checks, and functional tests |
 
 The official Ubuntu cloud image was verified against its signed checksum
 manifest before import. Image preparation and Proxmox API permissions
@@ -239,7 +339,12 @@ The consolidated workflow has not yet been validated through a complete
 rebuild from fresh VMs. It does not implement Kubernetes upgrades or
 application data restoration.
 
-See `rebuild.md` for prerequisites, commands, and functional validation.
+Gateway API CRDs must be installed before the Cilium stage on a fresh
+cluster. Argo CD, Kyverno, cert-manager, local-path storage, AppProjects,
+namespaces, Secrets, and the root Application are separate bootstrap
+responsibilities. `ansible/site.yml` does not install that entire platform.
+
+See [rebuild.md](rebuild.md) for prerequisites, commands, and functional validation.
 
 ## Validation evidence
 
@@ -255,6 +360,10 @@ See `rebuild.md` for prerequisites, commands, and functional validation.
 | DNS                   | Test Service resolved to its ClusterIP                         |
 | Cross-node traffic    | Direct pod HTTP request returned the expected response         |
 | Service traffic       | HTTP through the Service name returned the expected response   |
+| GitOps | Seven Applications Synced and Healthy in the October 31 review |
+| Application stack | API, Keycloak, and PostgreSQL each ready; PostgreSQL PVC bound |
+| Admission | Signed image allowed; unsigned and unauthorized images denied in recorded dry-run tests |
+| LAN HTTPS | Production certificate issued; redirect, verified HTTPS, and browser login recorded |
 
 The smoke test in `kubernetes/tests/network-smoke.yml` places a server on
 `k8s-worker01` and a client on `k8s-worker02`.
@@ -275,7 +384,9 @@ those restarts has not been established.
 - The local administrator kubeconfig grants privileged cluster access.
 - Secrets, kubeconfigs, Terraform state, and plans are excluded from Git.
 - Terraform state is local; off-host state protection remains pending.
-- Strict network segmentation and workload policy enforcement are unverified.
+- Image admission is enforced; workload network isolation remains unverified.
+- Secrets are provisioned outside Git; encrypted or external secret management is pending.
+- Application image scanning has documented, expiring exceptions; vendor images are outside that scan scope.
 - Node-local data does not survive loss of the underlying storage.
 - Off-host backup and restore procedures have not been validated.
 - Recreating infrastructure does not restore application data.
@@ -285,11 +396,8 @@ A Proxmox-generated cloud-init deprecation warning remains documented in
 
 ## Next architecture milestones
 
-1. Test the consolidated deployment workflow through a complete rebuild.
-2. Deploy an application with explicit authentication and authorization.
-3. Add CI/CD security checks with demonstrated failure and remediation.
-4. Validate workload isolation and pipeline identity controls.
-5. Implement off-host backups and test restoration.
-
-Tool selection for later stages will follow concrete application and
-operating requirements.
+1. Extend LAN HTTPS to the application and Keycloak with consistent OIDC configuration.
+2. Validate workload network isolation and operational failure scenarios.
+3. Implement off-host state/data protection and test restoration.
+4. Test the full bootstrap and application recovery path from fresh VMs.
+5. Add observability, SBOM/provenance, and approval-driven release updates.

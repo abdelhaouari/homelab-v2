@@ -12,6 +12,12 @@ from fresh VMs has not yet been tested with this consolidated workflow.
 This procedure provisions and configures infrastructure. It does not
 restore application data.
 
+The current platform also includes Argo CD, Kyverno, cert-manager,
+Gateway API, local-path storage, and GitOps-managed services. These have
+separate bootstrap responsibilities described below. `ansible/site.yml`
+manages the hosts, Kubernetes, local access, and Cilium; it does not install
+the complete platform.
+
 ## Execution environment
 
 Run commands from Ubuntu WSL, at the repository root.
@@ -38,8 +44,8 @@ Before provisioning, ensure that:
 - The Proxmox API is reachable at `https://192.168.0.199:8006/`.
 - VLAN 20 is available on `vmbr1`.
 - Gateway and DNS service are available at `10.10.20.1`.
-- Node addresses `.11`, `.21`, `.22`, and `.23` are available in
-  `10.10.20.0/24`.
+- Node addresses `.11`, `.21`, `.22`, and `.23`, plus Gateway address
+  `.103`, are available in `10.10.20.0/24`.
 - The DHCP pool remains outside the static node allocation.
 - The verified Ubuntu image is available as
   `local:import/ubuntu-24.04-server-cloudimg-amd64-20261017.qcow2`.
@@ -191,7 +197,8 @@ Validate the consolidated playbook:
   --syntax-check
 ```
 
-Run the complete configuration workflow:
+On an existing cluster with Gateway API CRDs already installed, run the
+complete configuration workflow:
 
 ```bash
 .venv/bin/ansible-playbook \
@@ -211,8 +218,59 @@ The entry point runs these stages in order:
 8. Install or reconcile Cilium.
 9. Check node readiness and the CoreDNS rollout.
 
-Use the complete workflow on fresh hosts. Tags select stages but do not
-resolve their dependencies.
+On fresh hosts, follow the split workflow below to satisfy the Gateway API
+dependency. Tags select stages but do not resolve their dependencies.
+
+### Fresh-cluster Gateway API prerequisite
+
+The current Cilium values enable Gateway API. On a fresh cluster, install
+its CRDs after the API is available and before installing Cilium.
+Split the workflow at its networking stage:
+
+```bash
+.venv/bin/ansible-playbook \
+  -i ansible/inventory.yml \
+  ansible/site.yml \
+  --skip-tags networking
+
+export KUBECONFIG="$PWD/private/homelab-v2.kubeconfig"
+bash kubernetes/gateway-api/install-crds.sh
+
+.venv/bin/ansible-playbook \
+  -i ansible/inventory.yml \
+  ansible/site.yml \
+  --tags networking
+```
+
+The script installs Gateway API `v1.6.3` CRDs with server-side dry-run
+before apply. Nodes and CoreDNS can remain unready until Cilium is
+installed. The earlier bootstrap stages verify API readiness and node
+registration, allowing this ordering.
+
+This sequence reflects the current dependencies; a complete execution
+from fresh VMs remains to be validated.
+
+### Platform services after the infrastructure stage
+
+| Component | Bootstrap input / ownership |
+| --- | --- |
+| Local-path storage | Apply `kubernetes/storage/local-path-storage.yaml`; separate from Argo CD |
+| Argo CD | Helm chart `10.11.6`, values in `gitops/bootstrap/argocd/values.yaml` |
+| Kyverno | Helm chart `3.9.2`, values in `kubernetes/kyverno/values.yaml` |
+| cert-manager | Pinned chart and procedure in the [cert-manager guide](../kubernetes/cert-manager/README.md) |
+| Namespaces and Secrets | Provision outside GitOps; see [GitOps bootstrap](../gitops/README.md) |
+| AppProjects and root Application | Bootstrap explicitly from `gitops/projects/` and `gitops/bootstrap/root-application.yaml` |
+| Workloads and selected platform resources | Reconciled by the six child Applications after bootstrap prerequisites exist |
+| LAN DNS | Workstation/LAN configuration outside this repository, pointing the Argo CD hostname to `10.10.20.103` |
+
+Install the controllers before their custom resources. Create the
+Cloudflare credential Secret before testing issuance; synchronize network
+address allocation before expecting Gateway reachability. Configure
+application Secrets and storage before starting PostgreSQL and consumers.
+
+The [GitOps guide](../gitops/README.md) describes resource ownership,
+dependencies, and application access. A consolidated, tested controller,
+secret, and data-recovery runbook remains follow-up work.
 
 ## Existing and partial cluster states
 
