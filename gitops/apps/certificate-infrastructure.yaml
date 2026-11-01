@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: certificate-infrastructure
+  namespace: argocd
+spec:
+  project: platform-certificates
+  source:
+    repoURL: https://github.com/abdelhaouari/homelab-v2.git
+    targetRevision: main
+    path: gitops/manifests/certificate-infrastructure
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+      selfHeal: true

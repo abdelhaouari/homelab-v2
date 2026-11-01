@@ -17,6 +17,7 @@ Custom schemas were converted from the installed CRDs:
 - Cilium: 1.20.4
 - Kyverno: v1.19.2
 - Gateway API: v1.6.3
+- cert-manager: v1.21.3
 
 Conversion used scripts/openapi2jsonschema.py from yannh/kubeconform
 tag v0.8.0, with FILENAME_FORMAT={fullgroup}-{kind}_{version}.
