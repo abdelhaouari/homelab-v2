@@ -16,4 +16,25 @@ spec:
       port: 80
       allowedRoutes:
         namespaces:
-          from: Same
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+        kinds:
+          - kind: HTTPRoute
+    - name: https-argocd
+      protocol: HTTPS
+      port: 443
+      hostname: argocd.lab.ahaouari.com
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: argocd-tls
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+        kinds:
+          - kind: HTTPRoute

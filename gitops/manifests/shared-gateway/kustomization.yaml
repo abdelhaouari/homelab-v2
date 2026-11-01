@@ -4,3 +4,4 @@ namespace: ingress-system
 resources:
   - gateway.yaml
   - argocd-staging-certificate.yaml
+  - argocd-certificate.yaml
