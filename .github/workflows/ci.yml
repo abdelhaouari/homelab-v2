@@ -15,6 +15,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gitops:
+    name: Validate GitOps manifests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned validation tools
+        run: |
+          set -euo pipefail
+
+          tool_dir="$(mktemp -d "$RUNNER_TEMP/gitops-tools.XXXXXX")"
+
+          curl --fail --silent --show-error --location \
+            --retry 3 --connect-timeout 10 --max-time 120 \
+            https://dl.k8s.io/release/v1.35.3/bin/linux/amd64/kubectl \
+            --output "$tool_dir/kubectl"
+
+          printf '%s  %s\n' \
+            fd31c7d7129260e608f6faf92d5984c3267ad0b5ead3bced2fe125686e286ad6 \
+            "$tool_dir/kubectl" |
+            sha256sum --check --strict
+
+          curl --fail --silent --show-error --location \
+            --retry 3 --connect-timeout 10 --max-time 120 \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            --output "$tool_dir/kubeconform.tar.gz"
+
+          printf '%s  %s\n' \
+            9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883 \
+            "$tool_dir/kubeconform.tar.gz" |
+            sha256sum --check --strict
+
+          tar -xzf "$tool_dir/kubeconform.tar.gz" \
+            -C "$tool_dir" kubeconform
+
+          chmod 0755 "$tool_dir/kubectl" "$tool_dir/kubeconform"
+          printf '%s\n' "$tool_dir" >> "$GITHUB_PATH"
+
+      - name: Show validation tool versions
+        run: |
+          kubectl version --client
+          kubeconform -v
+
+      - name: Render and validate GitOps manifests
+        run: bash ci/scripts/validate-gitops.sh
+
+      - name: Verify invalid manifests are rejected
+        run: python3 ci/scripts/test-gitops-validator.py
+
   validate:
     name: Test and build application
     runs-on: ubuntu-24.04
