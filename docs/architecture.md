@@ -158,7 +158,7 @@ Cilium 1.20.4 is installed through Helm with configuration stored in
 | Routing mode           | Tunnel              |
 | Tunnel protocol        | VXLAN               |
 | IP address management  | Kubernetes PodCIDRs |
-| kube-proxy replacement | Disabled            |
+| kube-proxy replacement | Enabled             |
 | Address family         | IPv4                |
 | Operator replicas      | 2                   |
 
@@ -168,8 +168,18 @@ avoiding the need for pod-subnet routes in OPNsense.
 
 VXLAN does not encrypt traffic. Workload encryption has not been configured.
 
-kube-proxy remains deployed for Service networking. Cilium NetworkPolicy
-enforcement has not yet been exercised through allow and deny tests.
+Cilium replaces kube-proxy for Service networking. It connects directly
+to the Kubernetes API at `10.10.20.11:6443`, independently of Service
+routing. The kube-proxy DaemonSet and ConfigMap were removed, and
+residual proxy rules were cleaned on all four nodes using the matching
+kube-proxy version in cleanup mode. Kubelet-managed chains were retained.
+
+Post-migration checks verified Service access from each node and DNS,
+application health, readiness, unauthenticated access rejection, and
+Keycloak discovery from the application Pod.
+
+Cilium NetworkPolicy enforcement has not yet been exercised through
+allow and deny tests.
 
 OPNsense filters traffic that traverses the router. Traffic between VMs
 on VLAN 20 can remain on the Proxmox bridge. Workload isolation therefore

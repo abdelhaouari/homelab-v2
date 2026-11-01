@@ -254,6 +254,25 @@ kubectl get pods -n kube-system -o wide
 Ansible passes the kubeconfig path explicitly to Helm and its local
 verification commands, so those tasks do not depend on this export.
 
+## Service networking without kube-proxy
+
+The kubeadm InitConfiguration skips `addon/kube-proxy` on fresh
+clusters. Cilium enables `kubeProxyReplacement` and uses the direct
+API endpoint configured through `k8sServiceHost` and `k8sServicePort`.
+
+The existing four-node cluster was migrated and its Service
+connectivity was validated. A complete fresh-cluster rebuild with
+this configuration has not yet been validated.
+
+Running the Cilium playbook alone does not migrate an existing
+kube-proxy installation: it does not remove the kube-proxy DaemonSet,
+its ConfigMap, or residual host rules. Those migration operations
+were performed separately with backups and per-node checks.
+
+After a kubeadm upgrade, verify that kube-proxy remains absent.
+The InitConfiguration skipPhases setting applies to initialization;
+it is not an upgrade policy.
+
 ## Cilium certificate management
 
 Cilium is pinned to chart version 1.20.4.

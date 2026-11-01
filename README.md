@@ -14,7 +14,7 @@ and PostgreSQL persistence. CI/CD and image security controls are next.
 - **Infrastructure as code:** Terraform provisions four Ubuntu VMs, including CPU, memory, disks, VLAN attachment, static addressing, and cloud-init SSH configuration.
 - **Repeatable host configuration:** Ansible installs the QEMU Guest Agent, configures containerd with systemd cgroups, prepares host networking, and installs version-pinned Kubernetes packages.
 - **Kubernetes lifecycle operations:** kubeadm initializes the control plane; an Ansible playbook joins workers using short-lived bootstrap tokens without displaying their values.
-- **Cluster networking:** Cilium provides a VXLAN overlay using Kubernetes-assigned PodCIDRs, with kube-proxy retained for Service networking.
+- **Cluster networking:** Cilium provides a VXLAN overlay using Kubernetes-assigned PodCIDRs and replaces kube-proxy with eBPF-based Service handling.
 - **Functional verification:** a reusable smoke test checks DNS, direct HTTP between pods on different workers, and HTTP through a ClusterIP Service.
 - **Application security:** a FastAPI promotion API integrates Keycloak,
   OIDC authentication, access token validation, and role-based authorization.

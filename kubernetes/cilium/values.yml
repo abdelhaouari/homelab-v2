@@ -6,8 +6,12 @@ ipam:
 routingMode: tunnel
 tunnelProtocol: vxlan
 
-# Keep the kube-proxy deployed by kubeadm.
-kubeProxyReplacement: false
+# Replace kube-proxy with Cilium's eBPF service handling.
+kubeProxyReplacement: true
+
+# Reach the API directly, independently of Kubernetes Services.
+k8sServiceHost: "10.10.20.11"
+k8sServicePort: 6443
 
 ipv4:
   enabled: true
