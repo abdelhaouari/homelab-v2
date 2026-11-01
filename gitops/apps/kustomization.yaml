@@ -5,3 +5,4 @@ resources:
   - promotion.yaml
   - kyverno-policies.yaml
   - network-infrastructure.yaml
+  - shared-gateway.yaml

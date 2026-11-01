@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-gateway
+  namespace: argocd
+spec:
+  description: Manage the shared LAN Gateway and its HTTP routes.
+  sourceRepos:
+    - https://github.com/abdelhaouari/homelab-v2.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: ingress-system
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute

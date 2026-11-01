@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shared-gateway
+  namespace: argocd
+spec:
+  project: platform-gateway
+  source:
+    repoURL: https://github.com/abdelhaouari/homelab-v2.git
+    targetRevision: main
+    path: gitops/manifests/shared-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ingress-system
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+      selfHeal: true
