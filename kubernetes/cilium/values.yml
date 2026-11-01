@@ -28,3 +28,16 @@ hubble:
     auto:
       enabled: true
       method: cronJob
+
+# Reconcile Kubernetes Gateway API resources.
+gatewayAPI:
+  enabled: true
+
+# Enable LAN announcements; a separate policy selects eligible Services.
+l2announcements:
+  enabled: true
+
+# Allow headroom for API requests, including L2 lease renewals.
+k8sClientRateLimit:
+  qps: 20
+  burst: 40

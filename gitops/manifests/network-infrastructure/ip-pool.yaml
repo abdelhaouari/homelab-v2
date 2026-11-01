@@ -1,0 +1,11 @@
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: homelab-gateway
+spec:
+  blocks:
+    - start: "10.10.20.103"
+      stop: "10.10.20.103"
+  serviceSelector:
+    matchLabels:
+      networking.ahaouari.com/exposure: lan-gateway

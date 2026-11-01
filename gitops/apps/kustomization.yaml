@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - promotion.yaml
   - kyverno-policies.yaml
+  - network-infrastructure.yaml

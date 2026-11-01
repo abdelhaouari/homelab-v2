@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: network-infrastructure
+  namespace: argocd
+spec:
+  project: platform-network
+  source:
+    repoURL: https://github.com/abdelhaouari/homelab-v2.git
+    targetRevision: main
+    path: gitops/manifests/network-infrastructure
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+      selfHeal: true

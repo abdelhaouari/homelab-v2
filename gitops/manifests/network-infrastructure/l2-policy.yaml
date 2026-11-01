@@ -1,0 +1,16 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: homelab-gateway
+spec:
+  serviceSelector:
+    matchLabels:
+      networking.ahaouari.com/exposure: lan-gateway
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+  interfaces:
+    - "^eth0$"
+  externalIPs: false
+  loadBalancerIPs: true

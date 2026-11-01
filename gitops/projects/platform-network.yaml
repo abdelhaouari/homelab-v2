@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-network
+  namespace: argocd
+spec:
+  description: Manage cluster-wide load balancer address allocation and L2 announcements.
+  sourceRepos:
+    - https://github.com/abdelhaouari/homelab-v2.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+  clusterResourceWhitelist:
+    - group: cilium.io
+      kind: CiliumLoadBalancerIPPool
+    - group: cilium.io
+      kind: CiliumL2AnnouncementPolicy
+  namespaceResourceBlacklist:
+    - group: "*"
+      kind: "*"
