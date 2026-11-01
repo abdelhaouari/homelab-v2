@@ -121,7 +121,16 @@ The argocd-staging Certificate reached Ready=True after approximately
 two minutes. This validated Cloudflare DNS-01 presentation and staging
 issuance without changing DNS resolver settings.
 
-Production issuance, automatic renewal, and browser HTTPS access remain
-to be tested.
+Production issuance was validated: the argocd Certificate reached
+Ready=True and generated the argocd-tls Secret.
+
+Access from the Windows workstation was verified:
+- Local DNS resolved argocd.lab.ahaouari.com to 10.10.20.103.
+- HTTP returned a 301 redirect to HTTPS.
+- HTTPS returned 200 without disabling certificate verification.
+- Browser login succeeded and all seven Argo CD Applications were
+  Synced and Healthy.
+
+Automatic renewal is configured but has not yet been observed.
 
 The chart is version-pinned; container images currently use version tags.
