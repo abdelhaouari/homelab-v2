@@ -37,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: application
-          image: ghcr.io/abdelhaouari/homelab-v2@sha256:d7c2b4436360b6ee92daac5683873d4114054359310800923cc9fbe2de022a87
+          image: ghcr.io/abdelhaouari/homelab-v2@sha256:d75d660a7c2e530946053866eaf0fe5194051363b0847c7a28bd4c46d00ff3d3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
