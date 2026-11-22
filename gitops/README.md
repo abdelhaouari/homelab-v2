@@ -334,3 +334,10 @@ risk exceptions and signature verification evidence.
 - Secret provisioning and recovery need a consolidated runbook.
 
 Git history and volume retention are not database backups.
+
+## REx-PN site
+
+The REx-PN static site configuration is documented in
+[its deployment guide](../docs/rexpn.md). Its dedicated namespace
+and AppProject are bootstrapped separately. Source publication and live
+deployment have not yet been performed.

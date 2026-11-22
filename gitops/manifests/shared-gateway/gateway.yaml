@@ -18,8 +18,10 @@ spec:
         namespaces:
           from: Selector
           selector:
-            matchLabels:
-              kubernetes.io/metadata.name: argocd
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [argocd, rexpn]
         kinds:
           - kind: HTTPRoute
     - name: https-argocd
@@ -36,5 +38,21 @@ spec:
           selector:
             matchLabels:
               kubernetes.io/metadata.name: argocd
+        kinds:
+          - kind: HTTPRoute
+    - name: https-rexpn
+      protocol: HTTPS
+      port: 443
+      hostname: rexpn.lab.ahaouari.com
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: rexpn-tls
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: rexpn
         kinds:
           - kind: HTTPRoute

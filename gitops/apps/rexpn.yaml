@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rexpn
+  namespace: argocd
+spec:
+  project: rexpn
+  source:
+    repoURL: git@github.com:abdelhaouari/rexpn-site.git
+    targetRevision: main
+    path: gitops/manifests/rexpn
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rexpn
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+      selfHeal: true
