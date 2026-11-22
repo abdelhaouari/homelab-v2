@@ -184,6 +184,13 @@ jobs:
             --file app/Dockerfile \
             app
 
+      - name: Verify native dependencies in the runtime image
+        run: |
+          docker run --rm --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --volume "$GITHUB_WORKSPACE/ci/scripts/test-runtime-libraries.py:/checks/runtime.py:ro" \
+            homelab-promotion:ci python /checks/runtime.py
+
       - name: Start application container
         run: |
           docker run --detach \

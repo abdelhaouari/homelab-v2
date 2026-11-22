@@ -34,8 +34,8 @@ infrastructure.
 | `http` | 80 | Route selects the Argo CD hostname | HTTPRoute redirects to HTTPS with status 301 |
 | `https-argocd` | 443 | `argocd.lab.ahaouari.com` | Terminates TLS using `argocd-tls`; HTTPRoute forwards to Argo CD |
 
-Both listeners accept HTTPRoutes only from the namespace selected by
-`kubernetes.io/metadata.name: argocd`. Routes reference this Gateway
+The HTTP listener accepts routes from `argocd` and `rexpn`. Each HTTPS
+listener accepts routes only from its matching namespace. Routes reference this Gateway
 across namespaces through `parentRefs`; the allowedRoutes selector
 permits that attachment.
 
@@ -80,7 +80,9 @@ and [certificate bootstrap](../../../kubernetes/cert-manager/README.md).
 
 ## Scope and remaining work
 
-Only Argo CD is currently routed. The promotion application and Keycloak
+Argo CD is the previously validated live route. The prepared REx-PN
+configuration adds `https-rexpn`, certificate `rexpn-tls` and routes for
+`rexpn.lab.ahaouari.com`; see [its guide](../../../docs/rexpn.md). The promotion application and Keycloak
 still use localhost port-forwards. Adding them requires listener/route
 configuration and consistent application OIDC URLs.
 

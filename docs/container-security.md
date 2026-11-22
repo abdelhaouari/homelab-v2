@@ -1,6 +1,20 @@
 # Application container security
 
-## Scope
+## Runtime update, 2026-11-22
+
+The candidate runtime uses the official Python 3.12 Alpine image pinned by
+digest, with available APK updates applied during build. Debian system tools
+that caused the expired exception findings are absent from this base.
+UID/GID 10001, read-only root filesystem and the existing runtime security
+checks are retained. The scan gate still blocks HIGH and CRITICAL findings;
+there are no active exceptions. CI validates native Python dependencies,
+HTTP behavior and process restrictions before publication.
+
+The assessment below is historical evidence for the previous Debian image,
+not an assessment of the new runtime. The deployed image changes only after
+CI publishes/signs a new digest and that digest is promoted in GitOps.
+
+## Historical Debian scope
 
 This assessment covers the promotion application runtime image based on
 python:3.12-slim-trixie, with Debian package updates applied during build.

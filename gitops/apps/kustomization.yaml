@@ -8,3 +8,4 @@ resources:
   - shared-gateway.yaml
   - certificate-infrastructure.yaml
   - argocd-routing.yaml
+  - rexpn.yaml

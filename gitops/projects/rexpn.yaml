@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: rexpn
+  namespace: argocd
+spec:
+  description: Serve the private REx-PN static application.
+  sourceRepos:
+    - git@github.com:abdelhaouari/rexpn-site.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: rexpn
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Service
+    - group: apps
+      kind: Deployment
+    - group: cilium.io
+      kind: CiliumNetworkPolicy
