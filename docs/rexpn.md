@@ -1,6 +1,6 @@
 # Private REx-PN practice site
 
-Prepared URL: **https://rexpn.lab.ahaouari.com**.
+URL: **https://rexpn.lab.ahaouari.com**.
 
 The original standalone HTML is stored unchanged in `app/rexpn/index.html`.
 Kustomize generates content and Nginx ConfigMaps with content hashes, so a
@@ -20,6 +20,18 @@ outbound pod connections. Browser links to reference websites still work:
 they originate on the user's device. Cilium's documented Gateway identity
 is used rather than a namespace selector for Envoy:
 https://docs.cilium.io/en/stable/network/servicemesh/gateway-api/gateway-api/
+
+## Verified deployment, 2026-11-22
+
+Argo CD reports `rexpn` and `shared-gateway` Synced/Healthy; both site replicas
+are ready. The production Certificate is Ready, and the HTTPS route reports
+Accepted/ResolvedRefs. DNS resolves to `10.10.20.103`; HTTP redirects to HTTPS.
+HTTPS returns 200 with certificate verification, and the served HTML is
+byte-identical to the supplied original (SHA-256
+`2ffc0fcfa92d2942df0e40529a31b2414902552a9a47582f4ad4fb7be48b5338`).
+Argo CD HTTPS still returns 200. The private CI run 45048190181 passed its
+server checks and HIGH/CRITICAL image scan. Mobile-data/VPN access must be
+checked on the user's phone; it was not independently tested here.
 
 ## Delivery and bootstrap
 

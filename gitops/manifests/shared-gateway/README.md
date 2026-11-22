@@ -1,8 +1,8 @@
 # Shared LAN Gateway
 
 This directory defines the shared Cilium Gateway in `ingress-system`.
-It now serves Argo CD on the LAN with HTTP-to-HTTPS redirection and a
-production certificate for `argocd.lab.ahaouari.com`.
+It serves Argo CD and REx-PN on the LAN with HTTP-to-HTTPS redirection
+and hostname-specific production certificates.
 
 ## Bootstrap
 
@@ -31,8 +31,9 @@ infrastructure.
 
 | Listener | Port | Hostname | Behavior |
 | --- | --- | --- | --- |
-| `http` | 80 | Route selects the Argo CD hostname | HTTPRoute redirects to HTTPS with status 301 |
+| `http` | 80 | Route selects the Argo CD or REx-PN hostname | HTTPRoute redirects to HTTPS with status 301 |
 | `https-argocd` | 443 | `argocd.lab.ahaouari.com` | Terminates TLS using `argocd-tls`; HTTPRoute forwards to Argo CD |
+| `https-rexpn` | 443 | `rexpn.lab.ahaouari.com` | Terminates TLS using `rexpn-tls`; HTTPRoute forwards to REx-PN |
 
 The HTTP listener accepts routes from `argocd` and `rexpn`. Each HTTPS
 listener accepts routes only from its matching namespace. Routes reference this Gateway
@@ -47,7 +48,7 @@ TLS ends at the Gateway. The HTTPS route forwards HTTP to
 `argocd-server:80` in `argocd`, where the backend Service and route share
 a namespace. No backend ReferenceGrant is required.
 
-The `shared-gateway` Argo CD Application manages the Gateway and both
+The `shared-gateway` Argo CD Application manages the Gateway and all three
 Certificate resources.
 Cilium manages its generated Service and proxy configuration.
 cert-manager manages issuance and the generated certificate Secrets.
@@ -80,9 +81,8 @@ and [certificate bootstrap](../../../kubernetes/cert-manager/README.md).
 
 ## Scope and remaining work
 
-Argo CD is the previously validated live route. The prepared REx-PN
-configuration adds `https-rexpn`, certificate `rexpn-tls` and routes for
-`rexpn.lab.ahaouari.com`; see [its guide](../../../docs/rexpn.md). The promotion application and Keycloak
+Argo CD and REx-PN are live routes. REx-PN uses `https-rexpn`, certificate `rexpn-tls` and routes for
+`rexpn.lab.ahaouari.com` (HTTPS verified on 2026-11-22); see [its guide](../../../docs/rexpn.md). The promotion application and Keycloak
 still use localhost port-forwards. Adding them requires listener/route
 configuration and consistent application OIDC URLs.
 

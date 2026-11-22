@@ -2,13 +2,19 @@
 
 ## Runtime update, 2026-11-22
 
-The candidate runtime uses the official Python 3.12 Alpine image pinned by
+The updated runtime uses the official Python 3.12 Alpine image pinned by
 digest, with available APK updates applied during build. Debian system tools
 that caused the expired exception findings are absent from this base.
 UID/GID 10001, read-only root filesystem and the existing runtime security
 checks are retained. The scan gate still blocks HIGH and CRITICAL findings;
 there are no active exceptions. CI validates native Python dependencies,
 HTTP behavior and process restrictions before publication.
+
+The main-branch CI run 45048467449 passed tests, native-library checks,
+process restrictions and the HIGH/CRITICAL scan with no active exceptions.
+It published and verified the signed digest
+`sha256:d75d660a7c2e530946053866eaf0fe5194051363b0847c7a28bd4c46d00ff3d3`,
+now selected in the GitOps Deployment.
 
 The assessment below is historical evidence for the previous Debian image,
 not an assessment of the new runtime. The deployed image changes only after
