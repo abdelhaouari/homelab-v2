@@ -12,7 +12,7 @@ COPY frontend/src ./src
 RUN npm run build
 
 
-FROM python:3.12-slim-trixie AS runtime
+FROM python:3.12-alpine@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -20,14 +20,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Apply available Debian package updates.
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd --gid 10001 app \
-    && useradd --uid 10001 --gid app \
-       --no-create-home --shell /usr/sbin/nologin app
+# Install available fixes without bringing Debian administrative tools into runtime.
+RUN apk upgrade --no-cache \
+    && addgroup -g 10001 app \
+    && adduser -D -H -u 10001 -G app -s /sbin/nologin app
 
 COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir -r requirements.txt \

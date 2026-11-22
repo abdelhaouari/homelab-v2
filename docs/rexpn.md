@@ -8,10 +8,10 @@ content/configuration change updates the Deployment's volume references and
 triggers a rollout. At about 210 KB the HTML fits within the 1 MiB ConfigMap
 limit. No custom image build, registry credentials, backend, or PVC is needed.
 
-Two Nginx replicas use an upstream image pinned by digest, UID/GID 101,
+Two Nginx replicas use an upstream image pinned by digest, UID/GID 65532,
 read-only root filesystems, dropped capabilities, no API token, resource
 limits, HTTP probes and preferred distribution across nodes. Only `/tmp`
-is writable. The digest was resolved from upstream `stable-alpine` on
+is writable. The digest was resolved from `cgr.dev/chainguard/nginx:latest` on
 2026-11-22; review upstream image updates regularly. This namespace is not
 covered by the existing promotion-specific Kyverno signature policy.
 
