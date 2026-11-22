@@ -339,5 +339,6 @@ Git history and volume retention are not database backups.
 
 The REx-PN static site configuration is documented in
 [its deployment guide](../docs/rexpn.md). Its dedicated namespace
-and AppProject are bootstrapped separately. Source publication and live
-deployment have not yet been performed.
+and AppProject are bootstrapped separately. The content is published only in the private `rexpn-site` repository.
+The site was deployed and verified over LAN HTTPS on 2026-11-22; phone/VPN
+access remains a device-side check.
