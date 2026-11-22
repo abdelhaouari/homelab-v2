@@ -43,7 +43,8 @@ Argo CD repository Secret provisioned outside Git. Never commit that key.
 
 The Argo CD Application uses the dedicated `rexpn` AppProject. As with the
 other applications, namespace/project bootstrap is explicit; workloads are
-reconciled by Argo CD. Automated sync/self-heal are enabled; pruning is off.
+reconciled by Argo CD. Automated sync/self-heal and pruning are enabled for REx-PN.
+`PruneLast=true` delays cleanup until the other sync resources are healthy.
 
 From the `homelab-v2` repository root, bootstrap the namespace and project:
 
@@ -123,8 +124,9 @@ Replace `app/rexpn/index.html` with the next complete HTML, validate and
 commit. `Cache-Control: no-cache` makes subsequent loads revalidate without
 clearing localStorage. Existing open tabs keep their loaded version until
 reloaded. Revert the relevant Git change to roll back; no database restore
-is involved. With pruning disabled, retain old ConfigMaps until no live Pod
-or retained ReplicaSet references them, then remove deliberately.
+is involved. Argo CD automatically removes obsolete ConfigMaps after a
+healthy sync. Roll back through Git so Kustomize recreates the required
+ConfigMap; a direct Deployment rollback may reference a pruned ConfigMap.
 
 The included LISEZ-MOI describes the author's educational limitations;
 deployment checks do not independently validate medical content.

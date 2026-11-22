@@ -169,7 +169,9 @@ Rendering and server dry-runs do not prove successful runtime behavior.
 ## Synchronization and deletion
 
 All seven Applications enable automated sync and self-heal.
-Automatic pruning is disabled, and none has a cascading-deletion finalizer.
+Automatic pruning is disabled except for REx-PN, which uses `PruneLast=true`
+to clean up obsolete generated ConfigMaps after a healthy sync. None has a
+cascading-deletion finalizer.
 
 Removing resources from Git therefore requires an explicit cleanup
 decision. Old generated ConfigMaps can remain when their content hash
